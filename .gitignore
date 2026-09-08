@@ -1,0 +1,49 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+build/
+coverage/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE and OS
+.vscode/
+.idea/
+.vs/
+.DS_Store
+Thumbs.db
+
+# Generated or heavyweight artifacts
+*.log
+*.tmp
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.ckpt
+*.safetensors
+*.gguf
+*.onnx
+models/
+outputs/
+
+# Local tooling
+.mcp.json
+.claude/

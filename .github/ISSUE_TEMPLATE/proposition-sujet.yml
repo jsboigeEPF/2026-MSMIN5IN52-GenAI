@@ -1,0 +1,67 @@
+name: Proposition de sujet libre
+description: Proposer un sujet absent du catalogue avant de commencer le développement
+title: "[Sujet] "
+labels:
+  - sujet-libre
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Vérifiez d'abord le catalogue actif et l'historique. Ne publiez ni secret ni donnée personnelle.
+  - type: input
+    id: title
+    attributes:
+      label: Titre du sujet
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problématique et verrou technique
+      description: Expliquez le problème et la difficulté centrale, pas seulement le secteur d'application.
+    validations:
+      required: true
+  - type: textarea
+    id: differentiation
+    attributes:
+      label: Différenciation
+      description: Comparez la proposition aux sujets du catalogue et aux projets historiques proches.
+    validations:
+      required: true
+  - type: textarea
+    id: mvp
+    attributes:
+      label: MVP démontrable le 21 octobre 2026
+    validations:
+      required: true
+  - type: textarea
+    id: evaluation
+    attributes:
+      label: Baseline, métriques et critères de réussite
+    validations:
+      required: true
+  - type: textarea
+    id: resources
+    attributes:
+      label: Ressources CoursIA et références externes
+      description: Donnez au moins deux notebooks CoursIA pertinents et trois sources officielles ou académiques.
+    validations:
+      required: true
+  - type: textarea
+    id: feasibility
+    attributes:
+      label: Faisabilité et plan B
+      description: Budget, APIs, Docker, GPU, données, risques et solution de repli.
+    validations:
+      required: true
+  - type: checkboxes
+    id: commitments
+    attributes:
+      label: Engagements
+      options:
+        - label: Le cœur du sujet n'a pas déjà été réalisé dans l'annexe historique.
+          required: true
+        - label: Le MVP est réalisable en six semaines par le groupe.
+          required: true
+        - label: Aucune donnée personnelle ou confidentielle ne sera publiée.
+          required: true
