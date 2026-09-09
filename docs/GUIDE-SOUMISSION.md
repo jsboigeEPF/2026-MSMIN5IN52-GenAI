@@ -17,10 +17,16 @@ Ne renommez, ne déplacez et ne supprimez aucun fichier appartenant au dépôt o
 ## 3. Travailler progressivement
 
 - Commitez régulièrement avec des messages décrivant le changement.
+- Reliez la PR finale à l'issue de réservation du sujet.
+- Ouvrez une PR brouillon ou publiez un point d'étape assez tôt pour rendre la progression visible.
 - Répartissez les tâches et relisez le code des autres membres.
 - Gardez une baseline simple pour mesurer l'apport du système GenAI.
 - Testez les modes d'échec : réponse invalide, indisponibilité d'une API, entrée vide, timeout, absence de GPU ou dépassement de budget.
 - Utilisez des données publiques, synthétiques ou dûment autorisées.
+
+Si le groupe reste bloqué après avoir isolé le problème et documenté ses essais, ouvrez une [demande d'accompagnement](https://github.com/jsboigeEPF/2026-MSMIN5IN52-GenAI/issues/new?template=demande-accompagnement.yml) avec une reproduction minimale et un lien vers la branche ou la PR. N'attendez pas la dernière semaine pour signaler un blocage.
+
+Les deux TPs et leurs contributions au dépôt CoursIA suivent un flux séparé, décrit dans [TPs dans CoursIA et bonus](TPS-ET-BONUS.md).
 
 ## 4. Contenu obligatoire du dossier
 

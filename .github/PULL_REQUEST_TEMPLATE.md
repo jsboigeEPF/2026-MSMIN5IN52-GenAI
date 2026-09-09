@@ -3,6 +3,8 @@
 - **Dossier :** `groupe-...`
 - **Sujet :** identifiant et titre
 - **Membres :** noms du groupe
+- **Issue de réservation :** #...
+- **Issue(s) d'accompagnement éventuelle(s) :** #...
 
 ## Résumé
 
@@ -19,6 +21,7 @@ Décrivez le MVP, l'architecture, les résultats mesurés et les limites princip
 - [ ] Aucun environnement virtuel, `node_modules`, poids de modèle ou artefact lourd n'est ajouté.
 - [ ] Les licences des modèles, données, bibliothèques et médias sont respectées.
 - [ ] La branche a été synchronisée sans supprimer ou remplacer le contenu du dépôt amont.
+- [ ] L'issue de réservation est liée et les éventuels blocages ont été signalés avant la dernière semaine.
 
 ## Démonstration
 

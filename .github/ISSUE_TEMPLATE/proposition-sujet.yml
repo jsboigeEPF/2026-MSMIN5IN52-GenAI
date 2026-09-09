@@ -2,7 +2,7 @@ name: Proposition de sujet libre
 description: Proposer un sujet absent du catalogue avant de commencer le développement
 title: "[Sujet] "
 labels:
-  - sujet-libre
+  - enhancement
 body:
   - type: markdown
     attributes:
@@ -26,6 +26,13 @@ body:
     attributes:
       label: Différenciation
       description: Comparez la proposition aux sujets du catalogue et aux projets historiques proches.
+    validations:
+      required: true
+  - type: textarea
+    id: objectives
+    attributes:
+      label: Objectifs mesurables
+      description: Listez les résultats intermédiaires vérifiables que le groupe s'engage à produire.
     validations:
       required: true
   - type: textarea

@@ -29,6 +29,21 @@ Un créateur d'assets 3D et un storyboard vidéo avaient été proposés mais au
 | Rédacteur de rapports | Recherche, base vectorielle, génération de texte et PDF | Exclu |
 | Data Analyst Agent | Analyse tabulaire, visualisation et appels d'outils | Exclu |
 
+## Thèmes connexes observés dans d'autres cursus
+
+Ces thèmes ont été vérifiés dans les dépôts ou archives EPITA et ECE. Ils ne sont pas automatiquement interdits, mais un sujet 2026 doit expliciter un verrou GenAI différent.
+
+| Thème observé | Technique centrale déjà explorée | Condition de renouvellement en 2026 |
+|---|---|---|
+| GraphRAG et questions sur graphes de connaissances | Extraction d'entités, graphe RDF/knowledge graph et retrieval | Isoler et mesurer un problème GenAI différent du simple pipeline GraphRAG |
+| Serveur MCP d'outils symboliques | Exposition SAT/SMT/OWL par outils MCP | Porter l'évaluation sur l'autorisation, l'audit ou la fiabilité d'un autre domaine |
+| Comparaison LLM contre solveur symbolique | Benchmark de raisonnement face à Z3 | Employer une tâche, un oracle et une hypothèse expérimentale nouveaux |
+| Génération neuro-symbolique validée par contraintes | Génération puis validation CSP | Changer le mécanisme de validation et démontrer son apport par ablation |
+| Analyse de sentiment et trading algorithmique | NLP de sentiment, indicateurs et stratégie de marché | Ne pas refaire une prédiction ou stratégie de trading ; privilégier provenance et auditabilité sans conseil financier |
+| Chatbot médical | Interface conversationnelle appliquée à la santé | Exiger citations, périmètre fermé, abstention mesurée et absence de diagnostic réel |
+| Modèles de diffusion multimodaux | Démonstration de génération image/vidéo | Évaluer contrôle, cohérence temporelle ou restauration sur un protocole reproductible |
+| Génération procédurale et jeux | Solveurs, heuristiques et création de niveaux | Le verrou doit porter sur une capacité GenAI mesurée, pas sur le solveur ou le jeu seul |
+
 ## Règle de différenciation
 
 Un nouveau sujet proche d'un thème historique doit changer son **verrou technique central**, pas seulement son nom, son secteur ou son interface. Par exemple :

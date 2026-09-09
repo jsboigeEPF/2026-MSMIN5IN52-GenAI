@@ -30,7 +30,21 @@ Pour un jury donné, la **note de base sur 20** est :
 (présentation + théorie + technique + organisation) / 2
 ```
 
-La moyenne des évaluations des pairs forme 50 % de la note de soutenance et l'évaluation de l'enseignant forme les 50 % restants. Les évaluations manifestement incomplètes ou non argumentées peuvent être écartées. L'ajustement lié à la taille du groupe est appliqué en dernier ; la note finale reste comprise entre 0 et 20.
+La moyenne des évaluations des pairs forme 50 % de la note de soutenance et l'évaluation de l'enseignant forme les 50 % restants. Les évaluations manifestement incomplètes ou non argumentées peuvent être écartées.
+
+## Bonus des TPs
+
+Le module comprend deux [TPs réalisés par contribution à CoursIA](TPS-ET-BONUS.md). Pour chaque TP, le premier exercice corrigé constitue le rendu de base ; le deuxième et le troisième exercice acceptés valent chacun +0,5 point. Le bonus est plafonné à +1 point par TP, soit **+2 points maximum** sur le module.
+
+La chaîne de calcul est :
+
+```text
+note_soutenance = 50 % moyenne des pairs + 50 % évaluation de l'enseignant
+note_avant_bonus = note_soutenance + ajustement de taille du groupe
+note_finale = min(20, note_avant_bonus + bonus des deux TPs)
+```
+
+Le bonus de TP est individuel et dépend des contributions acceptées et attribuables à chaque étudiant. La note finale reste comprise entre 0 et 20.
 
 ## Attendus transverses
 

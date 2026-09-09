@@ -47,3 +47,4 @@ outputs/
 # Local tooling
 .mcp.json
 .claude/
+/CLAUDE.md
