@@ -25,6 +25,11 @@ Le cours comporte six séances. Le projet est réalisé progressivement et doit 
 
 Les sujets libres sont possibles, mais doivent être proposés avec le [formulaire dédié](https://github.com/jsboigeEPF/2026-MSMIN5IN52-GenAI/issues/new?template=proposition-sujet.yml) et validés avant développement.
 
+## Deux circuits de contribution distincts
+
+- **Projet fil rouge** : le groupe développe son démonstrateur dans son fork de **ce dépôt**, puis ouvre une PR vers [`jsboigeEPF/2026-MSMIN5IN52-GenAI:main`](https://github.com/jsboigeEPF/2026-MSMIN5IN52-GenAI/pulls). Cette PR collective porte le projet évalué en soutenance.
+- **TPs individuels** : chaque étudiant corrige des exercices dans un notebook du dépôt [`jsboige/CoursIA`](https://github.com/jsboige/CoursIA), puis ouvre une PR distincte vers `jsboige/CoursIA:main`. Ces contributions ne vont ni dans le dossier du groupe ni dans la PR du projet ; leur barème est décrit dans [TPs dans CoursIA et bonus](docs/TPS-ET-BONUS.md).
+
 ## Documents de référence
 
 - [Catalogue des sujets 2026](docs/CATALOGUE.md)
