@@ -2,7 +2,7 @@
 
 - **Dossier :** `groupe-...`
 - **Sujet :** identifiant et titre
-- **Membres :** noms du groupe
+- **Membres :** comptes GitHub du groupe uniquement (`@pseudo`)
 - **Issue de réservation :** #...
 - **Issue(s) d'accompagnement éventuelle(s) :** #...
 
