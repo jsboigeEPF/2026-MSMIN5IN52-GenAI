@@ -1,0 +1,79 @@
+name: Demande d'accompagnement
+
+description: Signaler tôt un blocage technique ou méthodologique du groupe
+title: "[Aide] "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Cette issue sert à obtenir une aide ciblée. Ne collez jamais de clé API, fichier `.env`, donnée personnelle, donnée confidentielle ou journal contenant un secret.
+  - type: input
+    id: group
+    attributes:
+      label: Groupe et sujet
+      placeholder: groupe-nom — A1
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Étape concernée
+      options:
+        - Cadrage ou baseline
+        - Installation ou environnement
+        - Données ou ingestion
+        - Modèle, prompt ou orchestration
+        - Tests ou évaluation
+        - Interface ou démonstration
+        - Documentation ou soutenance
+    validations:
+      required: true
+  - type: textarea
+    id: symptom
+    attributes:
+      label: Blocage observé
+      description: Décrivez le résultat attendu, le résultat obtenu et le message d'erreur utile.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction minimale
+      description: Donnez les commandes et étapes minimales permettant de reproduire le problème, sans secret.
+    validations:
+      required: true
+  - type: textarea
+    id: attempts
+    attributes:
+      label: Essais déjà réalisés
+      description: Listez les hypothèses testées, résultats et ressources consultées.
+    validations:
+      required: true
+  - type: input
+    id: work_link
+    attributes:
+      label: Lien vers la branche ou la Pull Request
+      description: Fournissez un lien public permettant de lire le code concerné.
+    validations:
+      required: true
+  - type: dropdown
+    id: help_type
+    attributes:
+      label: Aide attendue
+      options:
+        - Diagnostic du blocage
+        - Avis sur l'architecture
+        - Relecture du protocole d'évaluation
+        - Aide à réduire le périmètre
+        - Relecture de la démonstration
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Sécurité
+      options:
+        - label: J'ai retiré les clés, tokens, données privées et sorties volumineuses.
+          required: true

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ressources et exercices CoursIA
+    url: https://github.com/jsboige/CoursIA
+    about: Consultez le dépôt du cours pour les notebooks et les Pull Requests de TP.
+  - name: Question confidentielle
+    url: https://github.com/jsboigeEPF/2026-MSMIN5IN52-GenAI/blob/main/docs/GUIDE-SOUMISSION.md
+    about: Ne publiez pas de donnée personnelle ou de secret dans une issue ; contactez l'enseignant par le canal annoncé en classe.
