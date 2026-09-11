@@ -6,7 +6,7 @@ Dépôt de projets du cours **MSMIN5IN52 — IA générative et chatbots**, grou
 
 | Étape | Date |
 |---|---|
-| Première séance | Mercredi 9 septembre 2026, 08:30–12:15 |
+| Première séance | Mercredi 16 septembre 2026, 08:30–12:15 |
 | Dépôt de la Pull Request finale | **Lundi 19 octobre 2026 à 23:59** |
 | Soutenance et démonstration | **Mercredi 21 octobre 2026** |
 
@@ -28,7 +28,7 @@ Les sujets libres sont possibles, mais doivent être proposés avec le [formulai
 ## Deux circuits de contribution distincts
 
 - **Projet fil rouge** : le groupe développe son démonstrateur dans son fork de **ce dépôt**, puis ouvre une PR vers [`jsboigeEPF/2026-MSMIN5IN52-GenAI:main`](https://github.com/jsboigeEPF/2026-MSMIN5IN52-GenAI/pulls). Cette PR collective porte le projet évalué en soutenance.
-- **TPs individuels** : chaque étudiant corrige des exercices dans un notebook du dépôt [`jsboige/CoursIA`](https://github.com/jsboige/CoursIA), puis ouvre une PR distincte vers `jsboige/CoursIA:main`. Ces contributions ne vont ni dans le dossier du groupe ni dans la PR du projet ; leur barème est décrit dans [TPs dans CoursIA et bonus](docs/TPS-ET-BONUS.md).
+- **TPs par groupe** : le groupe corrige des exercices dans un notebook du dépôt [`jsboige/CoursIA`](https://github.com/jsboige/CoursIA), puis ouvre une PR distincte vers `jsboige/CoursIA:main`. Ces contributions ne vont ni dans le dossier du groupe ni dans la PR du projet ; leur barème est décrit dans [TPs dans CoursIA et bonus](docs/TPS-ET-BONUS.md).
 
 ## Documents de référence
 

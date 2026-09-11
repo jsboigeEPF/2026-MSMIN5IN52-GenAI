@@ -44,7 +44,7 @@ note_avant_bonus = note_soutenance + ajustement de taille du groupe
 note_finale = min(20, note_avant_bonus + bonus des deux TPs)
 ```
 
-Le bonus de TP est individuel et dépend des contributions acceptées et attribuables à chaque étudiant. La note finale reste comprise entre 0 et 20.
+Le bonus de TP est acquis par groupe et dépend des contributions acceptées et attribuables au groupe. La note finale reste comprise entre 0 et 20.
 
 ## Attendus transverses
 
