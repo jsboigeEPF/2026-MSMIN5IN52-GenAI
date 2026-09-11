@@ -15,7 +15,7 @@ Un groupe de plus de quatre personnes n'est pas autorisé sans accord explicite 
 
 ## Soutenance collégiale
 
-La soutenance a lieu le **mercredi 21 octobre 2026**. Les pairs et l'enseignant évaluent chaque projet sur les mêmes quatre critères, chacun noté de 0 à 10.
+La soutenance a lieu le **mercredi 28 octobre 2026, de 13:15 à 17:00, salle A202**. Les pairs et l'enseignant évaluent chaque projet sur les mêmes quatre critères, chacun noté de 0 à 10.
 
 | Critère | Ce qui est évalué |
 |---|---|
@@ -59,4 +59,4 @@ La difficulté affichée dans le catalogue indique l'ampleur technique du sujet,
 
 ## Remise
 
-La Pull Request finale doit être ouverte au plus tard le **lundi 19 octobre 2026 à 23:59**, soit deux jours avant la soutenance. Le contenu évalué est celui de la PR à cette échéance. Les corrections ultérieures doivent être clairement identifiées.
+La Pull Request finale doit être ouverte au plus tard le **lundi 26 octobre 2026 à 23:59**, soit deux jours avant la soutenance. Le contenu évalué est celui de la PR à cette échéance. Les corrections ultérieures doivent être clairement identifiées.

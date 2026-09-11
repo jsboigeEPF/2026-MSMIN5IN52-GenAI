@@ -7,8 +7,8 @@ Dépôt de projets du cours **MSMIN5IN52 — IA générative et chatbots**, grou
 | Étape | Date |
 |---|---|
 | Première séance | Mercredi 16 septembre 2026, 08:30–12:15 |
-| Dépôt de la Pull Request finale | **Lundi 19 octobre 2026 à 23:59** |
-| Soutenance et démonstration | **Mercredi 21 octobre 2026** |
+| Dépôt de la Pull Request finale | **Lundi 26 octobre 2026 à 23:59** |
+| Soutenance et démonstration | **Mercredi 28 octobre 2026, de 13:15 à 17:00, salle A202** |
 
 Le cours comporte six séances. Le projet est réalisé progressivement et doit rester démontrable tout au long du module.
 
