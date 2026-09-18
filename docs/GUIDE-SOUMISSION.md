@@ -8,7 +8,7 @@ Choisissez un sujet du [catalogue](CATALOGUE.md) ou soumettez une proposition li
 
 1. Forkez `jsboigeEPF/2026-MSMIN5IN52-GenAI`.
 2. Clonez votre fork.
-3. Ajoutez le dépôt du cours comme remote `upstream`.
+3. Ajoutez le dépôt du cours comme remote `upstream` : `https://github.com/jsboigeEPF/2026-MSMIN5IN52-GenAI.git`.
 4. Créez une branche de travail.
 5. Créez **un seul** dossier `groupe-<nom-court>` à la racine à partir de [`template-groupe/`](../template-groupe/).
 
@@ -70,9 +70,11 @@ Si un secret a été commité, révoquez-le immédiatement puis prévenez l'ense
 4. Ouvrez une PR vers `jsboigeEPF/2026-MSMIN5IN52-GenAI:main`.
 5. Remplissez toute la checklist du modèle de PR.
 
+La PR publique identifie les membres uniquement par leurs comptes GitHub (`@pseudo`) ; n'indiquez ni nom civil, ni adresse e-mail, ni numéro étudiant.
+
 La PR est obligatoire : un lien vers un dépôt externe, un fichier envoyé séparément ou un push direct ne constitue pas une remise.
 
-**Date limite : lundi 19 octobre 2026 à 23:59.**
+**Date limite : lundi 26 octobre 2026 à 23:59.**
 
 ## 7. Préparer la soutenance
 
