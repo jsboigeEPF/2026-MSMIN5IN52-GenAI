@@ -44,7 +44,7 @@ Construire une recherche combinant lexical et vectoriel, puis reranker les passa
 - **Extensions** : HyDE, reranker neuronal, analyse par type de question.
 - **Faisabilité** : Python + Qdrant ; Docker utile, GPU non requis ; budget API cible inférieur à 10 €. Plan B : modèle local ou réponses extractives.
 
-**CoursIA** : [Retrieval avancé](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/RAG-et-Memoire-Semantique/02-Retrieval-Avance.ipynb) · [Kernel Memory Hybrid Search](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/RAG-et-Memoire-Semantique/08-KernelMemory-Hybrid-Search.ipynb) · [RAG moderne](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/5_RAG_Modern.ipynb)
+**CoursIA** : [Retrieval avancé](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/RAG-et-Memoire-Semantique/02-Retrieval-Avance.ipynb) · [Kernel Memory Hybrid Search](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/RAG-et-Memoire-Semantique/08-KernelMemory-Hybrid-Search.ipynb) · [RAG moderne](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/05_RAG_Modern.ipynb)
 
 **Références** : [Qdrant — Hybrid Queries](https://qdrant.tech/documentation/concepts/hybrid-queries/) · [BEIR](https://arxiv.org/abs/2104.08663) · [RAGAS](https://docs.ragas.io/)
 
@@ -74,7 +74,7 @@ Créer un banc de tests de sorties structurées : schémas imbriqués, contraint
 - **Extensions** : property-based testing, comparaison de fournisseurs, génération de contre-exemples.
 - **Faisabilité** : API texte uniquement ; budget cible inférieur à 8 €. Plan B : petit modèle local compatible JSON.
 
-**CoursIA** : [Structured Outputs](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/3_Structured_Outputs.ipynb) · [Production Patterns](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/9_Production_Patterns.ipynb) · [Évaluation de texte](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/22_Evaluating_Generated_Text.ipynb)
+**CoursIA** : [Structured Outputs](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/03_Structured_Outputs.ipynb) · [Production Patterns](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/09_Production_Patterns.ipynb) · [Évaluation de texte](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/22_Evaluating_Generated_Text.ipynb)
 
 **Références** : [JSON Schema](https://json-schema.org/specification) · [OpenAI — Structured Outputs](https://platform.openai.com/docs/guides/structured-outputs) · [Hypothesis](https://hypothesis.readthedocs.io/)
 
@@ -104,7 +104,7 @@ Comparer sur un même corpus l'injection du document complet, un RAG simple et u
 - **Extensions** : compression de contexte, cache, questions multi-documents.
 - **Faisabilité** : API texte ou modèle local ; budget cible inférieur à 12 €. Plan B : réponses mises en cache et corpus réduit.
 
-**CoursIA** : [Long Context Strategies](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/10c_Long_Context_Strategies.ipynb) · [RAG moderne](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/5_RAG_Modern.ipynb)
+**CoursIA** : [Long Context Strategies](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/10c_Long_Context_Strategies.ipynb) · [RAG moderne](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/05_RAG_Modern.ipynb)
 
 **Références** : [Lost in the Middle](https://arxiv.org/abs/2307.03172) · [RAG](https://arxiv.org/abs/2005.11401) · [LongBench](https://arxiv.org/abs/2308.14508)
 
@@ -153,7 +153,7 @@ Construire un orchestrateur qui choisit dynamiquement modèle, outil et profonde
 - **Extensions** : cache, modèle local, politique apprise.
 - **Faisabilité** : API texte ; budget expérimental plafonné à 15 €. Plan B : replay de réponses et faux outils.
 
-**CoursIA** : [Agentic Orchestration](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/13_Agentic_Orchestration.ipynb) · [Reasoning Models](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/8_Reasoning_Models.ipynb) · [Function Calling](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/4_Function_Calling.ipynb)
+**CoursIA** : [Agentic Orchestration](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/13_Agentic_Orchestration.ipynb) · [Reasoning Models](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/08_Reasoning_Models.ipynb) · [Function Calling](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/04_Function_Calling.ipynb)
 
 **Références** : [Anthropic — Building effective agents](https://www.anthropic.com/research/building-effective-agents) · [Semantic Kernel agents](https://learn.microsoft.com/en-us/semantic-kernel/frameworks/agent/) · [OpenAI — Function calling](https://platform.openai.com/docs/guides/function-calling)
 
@@ -168,7 +168,7 @@ Générer un notebook pédagogique à partir d'un cahier des charges, l'exécute
 - **Extensions** : plusieurs kernels, rubric pédagogique, sandbox renforcée.
 - **Faisabilité** : Jupyter + Semantic Kernel ; exécution limitée et sans accès aux secrets ; budget cible inférieur à 8 €. Plan B : exercices Python sans réseau.
 
-**CoursIA** : [NotebookMaker](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/SemanticKernel/10-SemanticKernel-NotebookMaker.ipynb) · [NotebookMaker batch paramétré](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/SemanticKernel/10b-SemanticKernel-NotebookMaker-batch-parameterized.ipynb) · [Code Interpreter](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/7_Code_Interpreter.ipynb)
+**CoursIA** : [NotebookMaker](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/SemanticKernel/10-SemanticKernel-NotebookMaker.ipynb) · [NotebookMaker batch paramétré](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/SemanticKernel/10b-SemanticKernel-NotebookMaker-batch-parameterized.ipynb) · [Code Interpreter](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/07_Code_Interpreter.ipynb)
 
 **Références** : [Jupyter nbclient](https://nbclient.readthedocs.io/) · [nbformat](https://nbformat.readthedocs.io/) · [OWASP — Insecure Output Handling](https://genai.owasp.org/llmrisk/llm052025-improper-output-handling/)
 
@@ -183,7 +183,7 @@ Construire un workflow outillé qui supporte doublons, interruption et reprise s
 - **Extensions** : files persistantes, concurrence, stratégie saga.
 - **Faisabilité** : outils simulés et base locale suffisants ; aucun GPU. Plan B : replay déterministe d'événements.
 
-**CoursIA** : [Process Framework](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/SemanticKernel/06-SemanticKernel-ProcessFramework.ipynb) · [Production Patterns](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/9_Production_Patterns.ipynb)
+**CoursIA** : [Process Framework](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/SemanticKernel/06-SemanticKernel-ProcessFramework.ipynb) · [Production Patterns](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/09_Production_Patterns.ipynb)
 
 **Références** : [Microsoft — Idempotency](https://learn.microsoft.com/en-us/azure/architecture/patterns/compensating-transaction) · [AWS Builders' Library — Idempotent APIs](https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/) · [OpenTelemetry](https://opentelemetry.io/docs/)
 
@@ -503,7 +503,7 @@ Migrer une petite bibliothèque entre langages ou frameworks avec un assistant, 
 - **Extensions** : property-based testing, performances, API incompatibles.
 - **Faisabilité** : projet borné à 500–1000 lignes ; aucun GPU. Plan B : fonctions pures et corpus synthétique.
 
-**CoursIA** : [CSharpRepl Live Patching](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Vibe-Coding/docs/CSharpRepl-Live-Patching.ipynb) · [Code Interpreter](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/7_Code_Interpreter.ipynb)
+**CoursIA** : [CSharpRepl Live Patching](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Vibe-Coding/docs/CSharpRepl-Live-Patching.ipynb) · [Code Interpreter](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/07_Code_Interpreter.ipynb)
 
 **Références** : [Hypothesis](https://hypothesis.readthedocs.io/) · [Differential Testing for Software](https://dblp.org/rec/journals/dtj/McKeeman98.html) · [Microsoft — Migration guidance](https://learn.microsoft.com/en-us/dotnet/core/porting/)
 
@@ -522,7 +522,7 @@ Construire une batterie reproductible d'attaques directes et indirectes contre u
 - **Extensions** : contenu multimodal, canary tokens, fuzzing.
 - **Faisabilité** : API texte, outils simulés sans effet réel ; budget cible inférieur à 12 €. Plan B : modèle local.
 
-**CoursIA** : [Prompt Security Red Team](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/9b_Prompt_Security_RedTeam.ipynb) · [Function Calling](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/4_Function_Calling.ipynb) · [Production Patterns](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/9_Production_Patterns.ipynb)
+**CoursIA** : [Prompt Security Red Team](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/09b_Prompt_Security_RedTeam.ipynb) · [Function Calling](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/04_Function_Calling.ipynb) · [Production Patterns](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/09_Production_Patterns.ipynb)
 
 **Références** : [OWASP LLM Prompt Injection](https://genai.owasp.org/llmrisk/llm01-prompt-injection/) · [MITRE ATLAS](https://atlas.mitre.org/) · [NIST AI RMF](https://www.nist.gov/itl/ai-risk-management-framework)
 
@@ -582,7 +582,7 @@ Définir une politique de réponse, l'appliquer par prompt ou filtre puis mesure
 - **Extensions** : critiques multiples, politiques par domaine, tests multilingues.
 - **Faisabilité** : outils simulés et API texte ; budget inférieur à 10 €. Plan B : modèle local.
 
-**CoursIA** : [Prompt Security Red Team](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/9b_Prompt_Security_RedTeam.ipynb) · [Production Patterns](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/9_Production_Patterns.ipynb)
+**CoursIA** : [Prompt Security Red Team](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/09b_Prompt_Security_RedTeam.ipynb) · [Production Patterns](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/09_Production_Patterns.ipynb)
 
 **Références** : [Constitutional AI](https://arxiv.org/abs/2212.08073) · [NIST AI RMF](https://www.nist.gov/itl/ai-risk-management-framework) · [OWASP GenAI](https://genai.owasp.org/)
 
@@ -665,7 +665,7 @@ Répondre à une question scientifique par une chaîne d'affirmations reliées �
 - **Extensions** : graphes de citations, recherche web, réplication de résultats.
 - **Faisabilité** : abstracts ou corpus ouvert ; budget inférieur à 12 €. Plan B : corpus local pré-indexé.
 
-**CoursIA** : [PDF Web Search](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/6_PDF_Web_Search.ipynb) · [RAG moderne](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/5_RAG_Modern.ipynb)
+**CoursIA** : [PDF Web Search](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/06_PDF_Web_Search.ipynb) · [RAG moderne](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/05_RAG_Modern.ipynb)
 
 **Références** : [Semantic Scholar API](https://api.semanticscholar.org/api-docs/) · [Crossref REST API](https://www.crossref.org/documentation/retrieve-metadata/rest-api/) · [SciFact](https://arxiv.org/abs/2004.14974)
 
@@ -680,7 +680,7 @@ Répondre à des questions sur tableaux et graphiques en produisant calculs, vis
 - **Extensions** : images de graphiques, détection d'anomalies, questions interactives.
 - **Faisabilité** : Python/pandas en sandbox ; GPU inutile. Plan B : requêtes et graphiques prédéfinis.
 
-**CoursIA** : [Code Interpreter](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/7_Code_Interpreter.ipynb) · [Semantic Kernel Multimodal](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/SemanticKernel/07-SemanticKernel-MultiModal.ipynb)
+**CoursIA** : [Code Interpreter](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/07_Code_Interpreter.ipynb) · [Semantic Kernel Multimodal](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/SemanticKernel/07-SemanticKernel-MultiModal.ipynb)
 
 **Références** : [Pandas](https://pandas.pydata.org/docs/) · [Vega-Lite](https://vega.github.io/vega-lite/) · [ChartQA](https://arxiv.org/abs/2203.10244)
 
@@ -714,7 +714,7 @@ Générer des données tabulaires synthétiques et mesurer simultanément utilit
 - **Extensions** : confidentialité différentielle, attributs rares, audit par sous-groupes.
 - **Faisabilité** : données publiques ou artificielles uniquement ; GPU inutile. Plan B : générateurs statistiques.
 
-**CoursIA** : [Structured Outputs](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/3_Structured_Outputs.ipynb) · [Supervised Fine-Tuning](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/FineTuning/FT-03-Supervised-FineTuning-SFT.ipynb)
+**CoursIA** : [Structured Outputs](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/03_Structured_Outputs.ipynb) · [Supervised Fine-Tuning](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/FineTuning/FT-03-Supervised-FineTuning-SFT.ipynb)
 
 **Références** : [NIST Privacy Framework](https://www.nist.gov/privacy-framework) · [Membership Inference Attacks](https://arxiv.org/abs/1610.05820) · [SDMetrics](https://docs.sdv.dev/sdmetrics/)
 
@@ -729,7 +729,7 @@ Construire une chaîne qui associe à chaque génération ses modèles, prompts,
 - **Extensions** : C2PA, SBOM de modèles, politiques organisationnelles.
 - **Faisabilité** : métadonnées synthétiques et licences publiques ; aucun GPU. Plan B : artefacts pré-générés.
 
-**CoursIA** : [Production Integration](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Image/04-Applications/04-3-Production-Integration.ipynb) · [Production Patterns](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/9_Production_Patterns.ipynb)
+**CoursIA** : [Production Integration](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Image/04-Applications/04-3-Production-Integration.ipynb) · [Production Patterns](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/09_Production_Patterns.ipynb)
 
 **Références** : [SPDX](https://spdx.dev/) · [Model Cards](https://arxiv.org/abs/1810.03993) · [C2PA](https://c2pa.org/)
 
@@ -778,7 +778,7 @@ Extraire des indicateurs de rapports publics et produire une analyse dont chaque
 - **Extensions** : tableaux scannés, comparaison d'entreprises, détection d'anomalies.
 - **Faisabilité** : rapports publics ; aucun conseil financier réel. Plan B : petit corpus local annoté.
 
-**CoursIA** : [PDF Web Search](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/6_PDF_Web_Search.ipynb) · [Structured Outputs](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/3_Structured_Outputs.ipynb)
+**CoursIA** : [PDF Web Search](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/06_PDF_Web_Search.ipynb) · [Structured Outputs](https://github.com/jsboige/CoursIA/blob/main/MyIA.AI.Notebooks/GenAI/Texte/03_Structured_Outputs.ipynb)
 
 **Références** : [SEC EDGAR APIs](https://www.sec.gov/search-filings/edgar-application-programming-interfaces) · [XBRL International](https://www.xbrl.org/) · [FinQA](https://arxiv.org/abs/2109.00122)
 
