@@ -1,6 +1,6 @@
 # Catalogue des sujets 2026
 
-Ce catalogue propose **48 sujets** répartis en douze axes. Chaque sujet définit un MVP réalisable en six semaines, un protocole d'évaluation et un plan de repli. Les notebooks liés sont des ressources de démarrage : le livrable doit aller au-delà de leur reproduction.
+Ce catalogue est l'offre officielle **2026-2027** du module : **48 sujets actifs** répartis en douze axes. Un sujet réservé par une issue d'inscription devient indisponible aux autres groupes ; un sujet libre validé y entre par le formulaire de proposition. Chaque sujet définit un MVP réalisable en six semaines, un protocole d'évaluation et un plan de repli. Les notebooks liés sont des ressources de démarrage : le livrable doit aller au-delà de leur reproduction.
 
 Consultez également les [sujets historiques exclus](HISTORIQUE-SUJETS.md), le [guide de soumission](GUIDE-SOUMISSION.md) et les [modalités d'évaluation](EVALUATION.md).
 
