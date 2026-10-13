@@ -16,7 +16,6 @@ __pycache__/
 dist/
 build/
 coverage/
-outputs/
 models/
 *.log
 *.tmp
