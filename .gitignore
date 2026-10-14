@@ -42,7 +42,6 @@ Thumbs.db
 *.gguf
 *.onnx
 models/
-outputs/
 
 # Local tooling
 .mcp.json
