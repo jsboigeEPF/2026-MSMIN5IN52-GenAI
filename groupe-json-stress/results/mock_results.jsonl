@@ -1,0 +1,8 @@
+{"schema_id":"S1","strategy":"baseline","first_try_valid":true,"final_valid":true,"attempts":1,"latency_ms":105.0,"cost":0.0010,"error_type":null,"provider":"mock","model":"mock-v1"}
+{"schema_id":"S1","strategy":"baseline","first_try_valid":false,"final_valid":false,"attempts":1,"latency_ms":115.0,"cost":0.0010,"error_type":"schema_validation","provider":"mock","model":"mock-v1"}
+{"schema_id":"S1","strategy":"retry","first_try_valid":true,"final_valid":true,"attempts":1,"latency_ms":110.0,"cost":0.0010,"error_type":null,"provider":"mock","model":"mock-v1"}
+{"schema_id":"S1","strategy":"retry","first_try_valid":false,"final_valid":true,"attempts":2,"latency_ms":215.0,"cost":0.0020,"error_type":null,"provider":"mock","model":"mock-v1"}
+{"schema_id":"S2","strategy":"baseline","first_try_valid":false,"final_valid":false,"attempts":1,"latency_ms":130.0,"cost":0.0012,"error_type":"schema_validation","provider":"mock","model":"mock-v1"}
+{"schema_id":"S2","strategy":"retry","first_try_valid":false,"final_valid":true,"attempts":2,"latency_ms":260.0,"cost":0.0024,"error_type":null,"provider":"mock","model":"mock-v1"}
+{"schema_id":"S3","strategy":"baseline","first_try_valid":false,"final_valid":false,"attempts":1,"latency_ms":145.0,"cost":0.0014,"error_type":"schema_validation","provider":"mock","model":"mock-v1"}
+{"schema_id":"S3","strategy":"retry","first_try_valid":false,"final_valid":true,"attempts":3,"latency_ms":420.0,"cost":0.0042,"error_type":null,"provider":"mock","model":"mock-v1"}

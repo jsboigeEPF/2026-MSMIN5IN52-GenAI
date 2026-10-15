@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "S4 - Complex Nested Order",
+  "type": "object",
+  "properties": {
+    "order_id": {"type": "string", "minLength": 1},
+    "customer": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "email": {"type": "string", "format": "email"},
+        "address": {
+          "type": "object",
+          "properties": {
+            "street": {"type": "string", "minLength": 1},
+            "city": {"type": "string", "minLength": 1},
+            "postal_code": {"type": "string", "minLength": 1}
+          },
+          "required": ["street", "city", "postal_code"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["name", "email"],
+      "additionalProperties": false
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "properties": {
+          "product": {"type": "string", "minLength": 1},
+          "quantity": {"type": "integer", "minimum": 1, "maximum": 100},
+          "unit_price": {"type": "number", "minimum": 0},
+          "category": {
+            "type": "string",
+            "enum": ["starter", "main", "dessert", "drink"]
+          },
+          "modifiers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {"type": "string", "minLength": 1},
+                "price_delta": {"type": "number"}
+              },
+              "required": ["name", "price_delta"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["product", "quantity", "unit_price", "category"],
+        "additionalProperties": false
+      }
+    },
+    "fulfillment_method": {
+      "type": "string",
+      "enum": ["delivery", "pickup"]
+    },
+    "delivery_address": {
+      "type": "string",
+      "minLength": 1
+    },
+    "special_instructions": {
+      "type": "string",
+      "maxLength": 300
+    }
+  },
+  "required": ["order_id", "customer", "items", "fulfillment_method"],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "fulfillment_method": {"const": "delivery"}
+        },
+        "required": ["fulfillment_method"]
+      },
+      "then": {
+        "required": ["delivery_address"]
+      },
+      "else": {
+        "not": {"required": ["delivery_address"]}
+      }
+    }
+  ],
+  "additionalProperties": false
+}

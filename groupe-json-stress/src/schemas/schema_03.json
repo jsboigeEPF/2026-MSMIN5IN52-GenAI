@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "S3 - Enums and Conditional Constraints",
+  "type": "object",
+  "properties": {
+    "order_id": {"type": "string", "minLength": 1},
+    "customer": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "email": {"type": "string", "format": "email"}
+      },
+      "required": ["name", "email"],
+      "additionalProperties": false
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "product": {"type": "string", "minLength": 1},
+          "quantity": {"type": "integer", "minimum": 1},
+          "unit_price": {"type": "number", "minimum": 0}
+        },
+        "required": ["product", "quantity", "unit_price"],
+        "additionalProperties": false
+      }
+    },
+    "fulfillment_method": {
+      "type": "string",
+      "enum": ["delivery", "pickup"]
+    },
+    "delivery_address": {
+      "type": "string",
+      "minLength": 1
+    },
+    "payment_method": {
+      "type": "string",
+      "enum": ["card", "cash", "online"]
+    }
+  },
+  "required": [
+    "order_id",
+    "customer",
+    "items",
+    "fulfillment_method",
+    "payment_method"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "fulfillment_method": {"const": "delivery"}
+        },
+        "required": ["fulfillment_method"]
+      },
+      "then": {
+        "required": ["delivery_address"]
+      },
+      "else": {
+        "not": {"required": ["delivery_address"]}
+      }
+    }
+  ],
+  "additionalProperties": false
+}
