@@ -1,0 +1,61 @@
+# Protocole de campagne de mesures (voir docs/METRICS.md). Tout est reproductible : graine fixe, stimuli synthétisés une fois.
+seed: 1234
+user_voices: [French_Male_Speech_New, French_Female_Speech_New]   # voix qui « parlent » à l'agent (alternées)
+utterances:             # sans chiffres : le WER ne dépend pas de la normalisation des nombres
+  - {id: u01, text: "Bonjour, tu m'entends bien ?"}
+  - {id: u02, text: "Merci, c'est très clair."}
+  - {id: u03, text: "Peux-tu répéter, s'il te plaît ?"}
+  - {id: u04, text: "J'ai un exposé demain sur les assistants vocaux et je ne sais pas par quoi commencer."}
+  - {id: u05, text: "Quelle est la différence entre un assistant vocal et un simple chatbot ?"}
+  - {id: u06, text: "Explique-moi comment fonctionne la reconnaissance de la parole, en quelques mots."}
+  - {id: u07, text: "Ce matin, j'ai pris le train pour Paris mais il avait beaucoup de retard, donc j'ai raté ma correspondance et j'ai dû décaler la réunion."}
+  - {id: u08, text: "Je voudrais comprendre pourquoi la latence est si importante dans une conversation, et comment on peut la réduire sans perdre en qualité."}
+  - {id: u09, text: "Si je coupe la parole à l'assistant en pleine phrase, est-ce qu'il s'arrête tout de suite et est-ce qu'il se souvient de ce que j'ai dit ?"}
+  - {id: u10, text: "Dis-moi trois choses à vérifier avant de présenter un projet devant toute la classe."}
+babble_texts:           # « foule » : plusieurs voix qui parlent en même temps, sans rapport avec les phrases testées
+  - "Alors hier soir on est allés au restaurant et le serveur nous a dit que la cuisine était déjà fermée."
+  - "Tu as vu le match de dimanche, franchement l'arbitre a été complètement nul sur la fin."
+  - "Je cherche encore mes clés depuis ce matin, je pense que je les ai laissées dans la voiture."
+  - "Il faudrait penser à réserver les billets avant la fin de la semaine sinon ce sera beaucoup plus cher."
+  - "Le projet avance doucement mais on a pris du retard sur la partie qui concerne les données."
+  - "Ma sœur déménage le mois prochain donc on va devoir l'aider à porter les cartons pendant tout le week-end."
+noise:
+  types: [white, babble]
+  snrs_db: [20, 10, 5, 0]       # + condition propre ; SNR = parole / bruit, mesuré sur les segments de parole
+stt:
+  reps: 2                       # 2 tirages de bruit différents par cellule
+vad:
+  noise_only_s: 30              # durée de bruit seul par (type, SNR) pour compter les faux déclenchements
+  sweep_end_silence_ms: [300, 450, 600, 800, 1000]   # balayage hors ligne : coupures de phrase vs délai de fin de tour
+  barge_sweep:                  # balayage hors ligne des seuils d'interruption (détection vs faux déclenchements)
+    strict_prob: [0.5, 0.6, 0.75, 0.9]
+    min_ms: [200, 300, 400]
+    conditions: [{noise: none, snr: null}, {noise: white, snr: 10}, {noise: babble, snr: 20}]
+    noise_only: [{noise: white, snr: 0}, {noise: babble, snr: 20}, {noise: babble, snr: 10}]
+latency:
+  warmup_turns: 1               # tours de chauffe signalés dans les données, exclus par défaut de l'analyse
+  conditions:
+    - {name: clean_nofiller,   noise: none,   snr: null, filler: false}
+    - {name: clean_filler,     noise: none,   snr: null, filler: true}
+    - {name: white10_filler,   noise: white,  snr: 10,   filler: true}
+    - {name: babble20_filler,  noise: babble, snr: 20,   filler: true}
+    - {name: babble10_filler,  noise: babble, snr: 10,   filler: true}   # cas limite : la foule est vue comme de la parole
+  stop_after_failures: 3        # après N échecs dans une condition, les énoncés restants sont ignorés (marqués `skipped`)
+barge:
+  prompt: {id: q_long, text: "Raconte-moi en détail comment fonctionne un assistant vocal, étape par étape."}
+  utterances:
+    - {id: b_short, text: "Attends, une seconde !"}
+    - {id: b_long,  text: "Non, attends, je voudrais plutôt que tu m'expliques la latence plus simplement."}
+  offsets_s: [1.0, 3.0, 5.0]    # délai entre le 1er audio de l'agent et le début de la parole de l'utilisateur
+  conditions:
+    - {noise: none,   snr: null, reps: 2}
+    - {noise: white,  snr: 10,   reps: 1}
+    - {noise: babble, snr: 20,   reps: 1}
+  false_positive_trials:        # l'agent parle, personne n'interrompt : aucun barge-in ne doit se produire (bruit allumé à ce moment-là)
+    - {noise: white,  snr: 0}
+    - {noise: babble, snr: 20}
+    - {noise: babble, snr: 10}
+    - {noise: babble, snr: 0}
+  thresholds:
+    detect_max_ms: 800          # début de parole -> message « interrupt » (hypothèse de METRICS.md : 500 ms, voir DECISIONS)
+    wer_max: 0.25               # transcription de la phrase interruptive
