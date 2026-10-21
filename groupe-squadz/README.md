@@ -46,6 +46,17 @@ Copiez `.env.example` vers `.env`, puis renseignez localement les valeurs (`OPEN
 python -m src.generator
 ```
 
+### Interface Streamlit
+
+Depuis le dossier `groupe-squadz`, installez les dépendances puis lancez :
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+L'interface propose les 10 concepts du MVP et un concept personnalisé. Elle affiche immédiatement les images présentes dans `data/outputs/system/`, et le bouton **Générer / Régénérer** appelle le pipeline résilient Plan A, Plan B, puis le secours local. Une génération reste possible sans clé API grâce au rendu Pillow de secours. Le schéma affiché est accompagné de son score de lisibilité OCR, de son plan d'origine et d'un bouton de téléchargement PNG.
+
 ## Tests
 
 ```bash

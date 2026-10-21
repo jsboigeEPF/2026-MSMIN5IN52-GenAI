@@ -48,3 +48,6 @@ models/
 .claude/
 .playwright-mcp/
 /CLAUDE.md
+
+
+outputs/

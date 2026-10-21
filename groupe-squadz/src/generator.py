@@ -3,17 +3,22 @@ import requests
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from dotenv import load_dotenv
+from src.postprocess import post_process_and_validate
 import base64
 
 load_dotenv()
 
-def generer_et_sauvegarder_image(concept, output_path, baseline=False):
+def generer_et_sauvegarder_image(concept, output_path, baseline=False, force_regenerate=False):
+    if os.path.exists(output_path) and not force_regenerate:
+        print(f"Image déjà existante dans le cache, génération évitée pour : {output_path}")
+        return "cache"
+
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     api_key = os.getenv("OPENROUTER_API_KEY")
     base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 
     if baseline:
-        prompt = f"Dessine un schéma simple représentant : {concept['titre']}"
+        prompt = f"Schéma simple et direct représentant : {concept['titre']}. {concept['description']}"
     else:
         try:
             from src.config import STYLE_TEMPLATE_AVANCE
@@ -58,9 +63,18 @@ def generer_et_sauvegarder_image(concept, output_path, baseline=False):
                 raise KeyError("Données de réponse vides.")
                 
             img.save(output_path, "PNG")
+            
+            # Post-traitement OCR et validation qualité
+            concepts_attendus = [concept['titre'].split()[0], "définition", "exemple"]
+            rapport_validation = post_process_and_validate(output_path, concepts_attendus)
+            print("Rapport de post-traitement OCR :", rapport_validation)
+
+            if rapport_validation["status"] == "WARNING":
+                print("Attention, certains éléments textuels manquent ou sont mal lisibles sur l'image !")
+
             print(f"Succès ! Image Plan A générée et sauvegardée : {output_path}")
             succes_plan_a = True
-            return True
+            return "plan_a"
         else:
             print(f"Erreur API Plan A ({response.status_code}) : {response.text}")
     except Exception as e:
@@ -167,5 +181,13 @@ def generer_et_sauvegarder_image(concept, output_path, baseline=False):
         draw.text((60, 938), "Module GenAI - Projet Educatif Squadz", fill=(148, 163, 184), font=font_subtitle)
 
         img.save(output_path, "PNG")
+        
+        concepts_attendus = [concept['titre'].split()[0], "définition", "exemple"]
+        rapport_validation = post_process_and_validate(output_path, concepts_attendus)
+        print("Rapport de post-traitement OCR :", rapport_validation)
+
+        if rapport_validation["status"] == "WARNING":
+            print("Attention, certains concepts pédagogiques manquent ou sont mal lisibles sur l'image !")
+        
         print(f"Schéma Plan B intelligent structuré généré et sauvegardé : {output_path}")
-        return True
+        return "plan_b"
