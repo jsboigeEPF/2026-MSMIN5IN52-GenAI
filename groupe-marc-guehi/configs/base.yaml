@@ -1,0 +1,46 @@
+audio:
+  sample_rate_in: 16000     # navigateur -> serveur (PCM16 mono)
+  sample_rate_out: 24000    # à confirmer selon le TTS
+vad:
+  threshold: 0.5
+  neg_threshold: 0.35
+  min_speech_ms: 96
+  end_silence_ms: 450       # fin de tour (à calibrer ; 600 ms dans la référence mesurée)
+  preroll_ms: 300
+  min_voiced_ms: 200
+session:
+  max_history_messages: 20
+  strict_after_s: 0.5       # après la fin de lecture : seuil VAD relevé (écho résiduel)
+  barge_in_min_speech_ms: 300   # parole continue requise pour interrompre l'agent
+  barge_in_min_prob: 0.75       # seuil VAD relevé tant que l'agent parle (anti-écho)
+filler:
+  enabled: true
+  min_speech_ms: 1800       # pas d'accroche après un énoncé très court (« bonjour », « merci »)
+  texts:                    # neutres : choisies avant de connaître la question ; l'agent n'a pas accès à internet
+    - "Alors,"
+    - "Hmm, voyons."
+    - "Voyons voir."
+    - "Eh bien,"
+    - "Mmh, d'accord."
+    - "Ok, je réfléchis."
+    - "Bien sûr."
+    - "Hum, une seconde."
+    - "D'accord, alors,"
+    - "Bon, voyons ça."
+    - "Hmm, laisse-moi réfléchir un instant."
+    - "Alors, voyons un peu ça."
+llm:
+  max_tokens: 200
+  temperature: 0.6
+  system_prompt: >
+    Tu es un assistant vocal. Réponds en français, en phrases courtes (1 à 3),
+    sans markdown ni listes, adaptées à l'oral.
+tts:
+  response_format: mp3      # MiniMax ne streame qu'en mp3 (décodage en PCM côté serveur)
+  min_chunk_chars: 20       # découpe en phrases avant envoi au TTS
+  speeds:                   # débit relatif par voix (mesuré : ~6,6 s pour la phrase test, contre 8,9 s et 7,6 s à 1.0)
+    French_Female_Speech_New: 1.3
+    French_Male_Speech_New: 1.15
+keepalive_s: 25            # appels factices périodiques (Whisper de l'école, connexions)
+metrics:
+  trace_dir: data/traces
