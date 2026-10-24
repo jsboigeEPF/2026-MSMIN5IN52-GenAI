@@ -1,7 +1,7 @@
 """Serveur FastAPI : page web + WebSocket /ws (micro 16 kHz PCM16 en entrée, audio 24 kHz PCM16 en sortie).
 
 Lancer : uvicorn src.transport.app:app --port 8000   (VOICE_DRY_RUN=1 pour des faux fournisseurs, sans réseau)
-Protocole : binaire client->serveur = PCM16 16 kHz ; serveur->client = PCM16 24 kHz ; texte = JSON (voir session.py).
+Protocole : binaire client->serveur = PCM16 16 kHz ; serveur->client = PCM16 24 kHz ; texte = JSON (voir docs/ARCHITECTURE.md).
 """
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from src.metrics.cost import CostLedger
 from src.metrics.recorder import Recorder
 from src.metrics.tracer import Tracer
 from src.orchestrator.session import ConversationSession
+from src.orchestrator.session_config import SessionConfig, SessionDeps
 from src.tts.fillers import FillerBank, load_fillers
 from src.tts.voices import pick_voice
 from src.vad.endpointer import Endpointer, VadConfig
@@ -99,23 +100,19 @@ async def ws_endpoint(ws: WebSocket) -> None:
     async def send_json(msg: dict) -> None:
         await ws.send_text(json.dumps(msg, ensure_ascii=False))
 
-    sc, fcfg = s.cfg["session"], s.cfg.get("filler", {})
-    stc = s.cfg.get("stt", {})
     voice = pick_voice(s.tts_voices or ["fake"], random.Random())  # une voix par conversation
     stt, llm, tts = build_providers(s, voice, st.client, rec, st.dry)
-    bank = FillerBank(list(st.fillers[voice])) if st.fillers.get(voice) else None
-    search_bank = FillerBank(list(st.search_fillers[voice])) if st.search_fillers.get(voice) else None
-    wait_bank = FillerBank(list(st.wait_fillers[voice])) if st.wait_fillers.get(voice) else None
-    session = ConversationSession(
+
+    def bank(banks: dict) -> FillerBank | None:
+        return FillerBank(list(banks[voice])) if banks.get(voice) else None
+
+    deps = SessionDeps(
         stt=stt, llm=llm, tts=tts, vad=st.vad, endpointer=Endpointer(vcfg), rec=rec,
         system_prompt=build_system_prompt(s), send_json=send_json, send_audio=ws.send_bytes,
-        fillers=bank, search_fillers=search_bank, wait_fillers=wait_bank,
-        search_wait_after_s=fcfg.get("search_wait_after_s", 0.0), speculative_ms=stc.get("speculative_ms", 0),
-        text_fallback_after=stc.get("fallback_to_text_after", 0), filler_min_speech_ms=fcfg.get("min_speech_ms", 1800),
-        rest_min=s.cfg["tts"]["min_chunk_chars"], max_history=sc["max_history_messages"],
-        barge_min_ms=sc["barge_in_min_speech_ms"], barge_prob=sc["barge_in_min_prob"], strict_after_s=sc["strict_after_s"])
+        fillers=bank(st.fillers), search_fillers=bank(st.search_fillers), wait_fillers=bank(st.wait_fillers))
+    session = ConversationSession(deps, SessionConfig.from_dict(s.cfg))
     rec("session_start", voice=voice, dry_run=st.dry)
-    await send_json({"type": "ready", "voice": voice, "dry_run": st.dry, "state": session.state})
+    await send_json({"type": "ready", "voice": voice, "dry_run": st.dry, "state": session.state.value})
     try:
         while True:
             msg = await ws.receive()

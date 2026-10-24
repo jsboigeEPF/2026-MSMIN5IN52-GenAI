@@ -13,6 +13,11 @@ session:
   strict_after_s: 0.5       # après la fin de lecture : seuil VAD relevé (écho résiduel)
   barge_in_min_speech_ms: 300   # parole continue requise pour interrompre l'agent
   barge_in_min_prob: 0.6        # seuil VAD relevé tant que l'agent parle (anti-écho) ; 0,75 avant le 2026-10-24 (campagne : 0,5–0,6 détecte plus vite)
+  playback_margin_s: 0.05       # marge retirée à la durée jouée estimée par le serveur lors d'une interruption
+  carry_gap_ms: 150             # silence inséré entre l'audio repris d'un tour interrompu et la phrase suivante
+  failsafe_margin_s: 5.0        # marge ajoutée à la durée de l'audio avant de repasser en écoute sans accusé du client
+  interrupt_ack_timeout_s: 5.0  # un accusé `interrupted` du client plus tardif que cela est ignoré
+  strict_transitions: false     # true (tests) : une transition d'état illégale lève une erreur ; sinon elle est tracée (`state_illegal`)
 filler:
   enabled: true
   min_speech_ms: 1800       # pas d'accroche après un énoncé très court (« bonjour », « merci »)
@@ -46,6 +51,7 @@ llm:
     Tu es un assistant vocal. Réponds en français, en phrases courtes (1 à 3),
     sans markdown ni listes, adaptées à l'oral.
   date_line: "Nous sommes le {date}."
+  filler_hint: " Tu viens de dire à voix haute « {} » : enchaîne directement avec la réponse, sans nouvelle formule d'attente ni salutation."  # ajouté au prompt après une accroche
   search_hint: >            # ajouté au prompt si `search.enabled`
     Tu as accès à internet via l'outil web_search : utilise-le pour tout ce qui est actuel ou que tu ne peux pas
     savoir de mémoire (météo, actualité, scores, prix, horaires, événements récents), jamais pour la conversation
@@ -67,6 +73,7 @@ tts:
   fallback_voice: longanhuan_v3.6   # voix du TTS de secours (TTS_MODEL_ALT, PCM) si MiniMax échoue ; accent marqué en français
   response_format: mp3      # MiniMax ne streame qu'en mp3 (décodage en PCM côté serveur)
   min_chunk_chars: 20       # découpe en phrases avant envoi au TTS
+  first_chunk_min_chars: 8  # le 1er morceau part plus tôt (latence)
   speeds:                   # débit relatif par voix (mesuré : ~6,6 s pour la phrase test, contre 8,9 s et 7,6 s à 1.0)
     French_Female_Speech_New: 1.3
     French_Male_Speech_New: 1.15

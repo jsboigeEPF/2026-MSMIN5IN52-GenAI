@@ -1,13 +1,21 @@
 import asyncio
+from dataclasses import replace
+from pathlib import Path
+
+import yaml
 
 from src.fakes import FakeLLM, FakeSTT, FakeTTS
 from src.interfaces import SearchNotice
 from src.metrics.recorder import Recorder
-from src.orchestrator.session import LISTENING, ConversationSession
+from src.orchestrator.session import ConversationSession
+from src.orchestrator.session_config import SessionConfig, SessionDeps
+from src.orchestrator.state import State
 from src.tts.fillers import Filler, FillerBank
 from src.vad.endpointer import Endpointer, VadConfig
 
 FRAME = b"\x01\x00" * 512
+BASE = yaml.safe_load(Path("configs/base.yaml").read_text(encoding="utf-8"))
+LISTENING = State.LISTENING
 
 
 class ScriptedVAD:
@@ -34,7 +42,7 @@ class CountingSTT(FakeSTT):
         return self.texts[min(n, len(self.texts)) - 1]
 
 
-def make(stt=None, search_fillers=None, **kw):
+def make(stt=None, search_fillers=None, wait_fillers=None, **cfg_over):
     sent: list = []
 
     async def send_json(m):
@@ -44,10 +52,13 @@ def make(stt=None, search_fillers=None, **kw):
         sent.append(("audio", len(b)))
 
     vad, rec = ScriptedVAD(), Recorder()
-    s = ConversationSession(
+    deps = SessionDeps(
         stt=stt or FakeSTT("ma question"), llm=FakeLLM("Il fait beau. Vraiment très beau aujourd'hui.", on_event=rec), tts=FakeTTS(),
         vad=vad, endpointer=Endpointer(VadConfig(end_silence_ms=128)), rec=rec, system_prompt="s", send_json=send_json,
-        send_audio=send_audio, search_fillers=search_fillers, **kw)
+        send_audio=send_audio, search_fillers=search_fillers, wait_fillers=wait_fillers)
+    base = replace(SessionConfig.from_dict(BASE), strict_transitions=True, speculative_ms=0, text_fallback_after=0,
+                   search_wait_after_s=0.0)
+    s = ConversationSession(deps, replace(base, **cfg_over))
     return s, vad, sent
 
 
@@ -121,7 +132,7 @@ async def test_two_stt_failures_switch_to_text_mode_and_voice_can_be_retried():
     for _ in range(2):
         await feed(s, vad, 0.9, 20)
         await feed(s, vad, 0.0, 8)
-        await until(lambda: s.state == LISTENING and s._task.done())
+        await until(lambda: s.state == LISTENING and s.tasks.turn.done())
         await asyncio.sleep(0.2)
     assert {"type": "fallback", "mode": "text", "reason": "stt"} in sent and s.text_only
     n = len(sent)
@@ -162,7 +173,7 @@ def agent_chunks(sent):
 
 async def test_search_announce_is_spoken_before_the_answer():
     s, _, sent = make(search_fillers=bank())
-    s.llm = SlowSearchLLM()
+    s.deps.llm = SlowSearchLLM()
     await s.on_text("Quelle est la météo à Lyon ?")
     await until(lambda: "audio_end" in types(sent))
     assert agent_chunks(sent)[0] == "Je regarde la météo à Lyon."
@@ -173,7 +184,7 @@ async def test_search_announce_is_spoken_before_the_answer():
 
 async def test_announce_falls_back_to_generic_phrase_when_tts_fails():
     s, _, sent = make(search_fillers=bank("Je regarde ça."))
-    s.llm, s.tts = SlowSearchLLM(), BrokenAnnounceTTS()
+    s.deps.llm, s.deps.tts = SlowSearchLLM(), BrokenAnnounceTTS()
     await s.on_text("Quelle est la météo à Lyon ?")
     await until(lambda: "audio_end" in types(sent))
     assert agent_chunks(sent)[0] == "Je regarde ça." and "Je regarde la météo à Lyon." not in s.history[-1]["content"]
@@ -181,7 +192,7 @@ async def test_announce_falls_back_to_generic_phrase_when_tts_fails():
 
 async def test_second_phrase_when_search_is_slow():
     s, _, sent = make(search_fillers=bank(), wait_fillers=bank("Encore un instant.", 0.2), search_wait_after_s=0.2)
-    s.llm = SlowSearchLLM()
+    s.deps.llm = SlowSearchLLM()
     await s.on_text("Quelle est la météo à Lyon ?")
     await until(lambda: "audio_end" in types(sent))
     assert agent_chunks(sent)[:2] == ["Je regarde la météo à Lyon.", "Encore un instant."]
@@ -190,7 +201,7 @@ async def test_second_phrase_when_search_is_slow():
 
 async def test_no_second_phrase_when_answer_comes_quickly():
     s, _, sent = make(search_fillers=bank(), wait_fillers=bank("Encore un instant.", 0.2), search_wait_after_s=2.0)
-    s.llm = SlowSearchLLM()
+    s.deps.llm = SlowSearchLLM()
     await s.on_text("Quelle est la météo à Lyon ?")
     await until(lambda: "audio_end" in types(sent))
     await asyncio.sleep(0.1)
@@ -199,7 +210,7 @@ async def test_no_second_phrase_when_answer_comes_quickly():
 
 async def test_tts_outage_keeps_text_and_tells_the_client():
     s, _, sent = make()
-    s.tts = BrokenTTS()
+    s.deps.tts = BrokenTTS()
     await s.on_text("Bonjour")
     await until(lambda: "audio_end" in types(sent))
     assert "tts_down" in types(sent) and agent_chunks(sent) and s.state == LISTENING
