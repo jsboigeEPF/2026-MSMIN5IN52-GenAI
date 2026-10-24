@@ -39,6 +39,12 @@ Définitions exactes dans @docs/METRICS.md. Événements : `vad_speech_start`, `
 4. Tronquer l'historique : ne garder que le texte **réellement joué** (suivi des échantillons lus → phrases complètes lues + éventuelle marque d'interruption) ; ne pas laisser dans le contexte du texte que l'utilisateur n'a pas entendu.
 5. Repasser en `USER_SPEAKING` en réutilisant l'audio capté depuis la détection (pré-roll) pour ne pas perdre le début de la phrase.
 
+## Accès internet (function calling)
+Le LLM reçoit l'outil `web_search`. Flux : 1re requête en flux → si `tool_calls` (ou balises DSML en texte, retenues par `ToolMarkupGuard`) → `SearchNotice` dans le flux → la session joue une accroche de recherche (si aucun morceau de réponse n'est encore parti) → `WebSearch.search` (OpenRouter, plugin `web`) → 2e requête (sans outil) avec le résultat → réponse en flux, découpée et synthétisée comme d'habitude. Une recherche au plus par réponse ; l'historique garde accroches + réponse, pas le résultat brut.
+
+## STT spéculatif et repli
+Dès `stt.speculative_ms` de silence dans un énoncé, la session lance le STT sur l'audio déjà capté ; la parole qui reprend l'annule ; à la fin de tour, `run_turn(stt_task=…)` réutilise la tâche. Si le STT échoue : repli `FallbackSTT` (2e fournisseur), puis après `stt.fallback_to_text_after` échecs consécutifs la session passe en `text_only` (micro ignoré) jusqu'à `voice_retry`.
+
 ## Écho
 Casque recommandé pour les mesures. Sans casque : coupure de la détection pendant les premières ms de lecture + seuil relevé, ou AEC (voir RISKS_AND_PLAN_B).
 
@@ -49,14 +55,14 @@ Même orchestrateur, source `TXT` à la place de VAD+STT ; sortie texte (et TTS 
 Une source `AudioFile` horodatée remplace le micro (même interface) ; permet tests, bruit contrôlé et plan B.
 
 ## Protocole WebSocket du prototype (`/ws`)
-Client → serveur : binaire = PCM16 16 kHz mono (trames de 512 échantillons) ; JSON `{"type":"text","text":…}` (mode texte), `{"type":"playback_ended"}`.
-Serveur → client : binaire = PCM16 24 kHz mono ; JSON `ready`, `state` (listening/thinking/speaking), `vad`, `transcript`, `agent_chunk`, `metrics`, `audio_end`, `error`.
+Client → serveur : binaire = PCM16 16 kHz mono (trames de 512 échantillons) ; JSON `{"type":"text","text":…}` (mode texte), `{"type":"playback_ended"}`, `{"type":"interrupted","played_s":…}`, `{"type":"voice_retry"}`.
+Serveur → client : binaire = PCM16 24 kHz mono ; JSON `ready` (voix), `state` (listening/thinking/speaking), `vad`, `transcript`, `agent_chunk`, `searching`, `metrics`, `audio_end`, `interrupt`, `truncate`, `fallback` (`mode`: text/voice), `error`.
 
 ## Structure cible
 ```
 CLAUDE.md
 docs/
-src/  audio/ vad/ stt/ llm/ tts/ orchestrator/ transport/ metrics/ fallback/
+src/  audio/ vad/ stt/ llm/ search/ tts/ orchestrator/ transport/ metrics/ fallback/
 tests/
 scripts/   (campagnes, génération de bruit, replay)
 data/      (audio, traces ; gitignoré)

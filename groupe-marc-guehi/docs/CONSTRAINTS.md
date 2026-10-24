@@ -1,7 +1,7 @@
 # Contraintes
 
 ## Budget cloud : < 15 € au total (cible interne : 10 €, réserve 5 €)
-**Précision (2026-10-20) :** l'énoncé fixe 15 € par prudence ; l'étudiant indique que ce n'est pas une priorité. Le compteur (`data/cost_ledger.jsonl`) avertit au dépassement mais ne bloque pas (`hard_stop` activable). Ordre de grandeur mesuré : ≈ 0,01 $ par tour réel complet.
+**Précision (2026-10-20) :** l'énoncé fixe 15 € par prudence ; l'étudiant indique que ce n'est pas une priorité. Le compteur (`data/cost_ledger.jsonl`) avertit au dépassement mais ne bloque pas (`hard_stop` activable). Ordre de grandeur mesuré : ≈ 0,01 $ par tour réel complet, ≈ 0,017 $ avec recherche internet (≈ 0,007 $ la recherche). Cumul réel (somme des `cost_usd`, pas `total_usd`) ≈ 2,2 $ au 2026-10-22 (DECISIONS 13f).
 Tarifs **[V]** 2026-10-20 (<https://developers.openai.com/api/docs/pricing>) : gpt-4o-mini-transcribe ≈ 0,003 $/min ; gpt-4o-mini-tts 0,60 $/1M tokens texte + 12 $/1M tokens audio ; gpt-5-mini 0,25/2,00 $ par 1M tokens (in/out). Conversion $→€ : hypothèse 1 $ = 1 €  (marge de sécurité).
 Hypothèse [H] : durée TTS ≈ 1 min audio ≈ quelques centimes (équivalence tokens audio/seconde non vérifiée → à calibrer sur un appel réel).
 

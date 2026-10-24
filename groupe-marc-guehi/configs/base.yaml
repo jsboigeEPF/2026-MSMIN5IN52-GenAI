@@ -16,7 +16,7 @@ session:
 filler:
   enabled: true
   min_speech_ms: 1800       # pas d'accroche après un énoncé très court (« bonjour », « merci »)
-  texts:                    # neutres : choisies avant de connaître la question ; l'agent n'a pas accès à internet
+  texts:                    # neutres : choisies avant de connaître la question
     - "Alors,"
     - "Hmm, voyons."
     - "Voyons voir."
@@ -29,12 +29,34 @@ filler:
     - "Bon, voyons ça."
     - "Hmm, laisse-moi réfléchir un instant."
     - "Alors, voyons un peu ça."
+  search_texts:             # jouées seulement quand le LLM décide de chercher sur internet
+    - "Je regarde ça."
+    - "Une seconde, je cherche."
+    - "Je vérifie sur internet."
+    - "Laisse-moi regarder."
 llm:
   max_tokens: 200
   temperature: 0.6
   system_prompt: >
     Tu es un assistant vocal. Réponds en français, en phrases courtes (1 à 3),
     sans markdown ni listes, adaptées à l'oral.
+  date_line: "Nous sommes le {date}."
+  search_hint: >            # ajouté au prompt si `search.enabled`
+    Tu as accès à internet via l'outil web_search : utilise-le pour tout ce qui est actuel ou que tu ne peux pas
+    savoir de mémoire (météo, actualité, scores, prix, horaires, événements récents), jamais pour la conversation
+    courante ni les connaissances générales. Une phrase d'attente (« je regarde ça ») est dite automatiquement
+    pendant la recherche : n'annonce pas que tu cherches, donne directement le résultat.
+stt:
+  language: fr
+  fallback_model: qwen/qwen3-asr-1.7b   # OpenRouter /audio/transcriptions, essayé si le Whisper de l'école échoue
+  fallback_to_text_after: 2             # échecs STT consécutifs (secours compris) avant de basculer en mode texte
+  speculative_ms: 200                   # STT lancé après ce silence, avant la fin de tour (annulé si la parole reprend) ; 0 = off
+search:                                 # accès internet : outil `web_search` appelé par le LLM (function calling)
+  enabled: true
+  max_results: 3
+  max_tokens: 250
+  timeout_s: 20
+  language: français                    # langue du résumé renvoyé par la recherche
 tts:
   response_format: mp3      # MiniMax ne streame qu'en mp3 (décodage en PCM côté serveur)
   min_chunk_chars: 20       # découpe en phrases avant envoi au TTS

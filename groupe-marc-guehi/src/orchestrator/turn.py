@@ -6,7 +6,7 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from src.interfaces import LLM, STT, TTS
+from src.interfaces import LLM, STT, TTS, SearchNotice
 from src.metrics.recorder import Recorder
 from src.orchestrator.chunker import SentenceChunker
 
@@ -26,14 +26,25 @@ async def run_turn(*, stt: STT, llm: LLM, tts: TTS, history: list[dict], system_
                    first_min: int = 8, rest_min: int = 20,
                    on_user_text: Callable[[str], Awaitable[None]] | None = None,
                    on_chunk: Callable[[str], Awaitable[None]] | None = None,
-                   on_audio: Callable[[bytes, int], Awaitable[None]] | None = None) -> TurnResult:
-    """on_chunk(texte) : un morceau part vers le TTS ; on_audio(pcm, idx) : audio prêt, dans l'ordre de lecture (idx = rang du morceau)."""
+                   on_audio: Callable[[bytes, int], Awaitable[None]] | None = None,
+                   on_search: Callable[[str], Awaitable[None]] | None = None,
+                   stt_task: asyncio.Task[str] | None = None) -> TurnResult:
+    """on_chunk(texte) : un morceau part vers le TTS ; on_audio(pcm, idx) : audio prêt, dans l'ordre de lecture (idx = rang du morceau) ;
+    on_search(requête) : le LLM cherche sur internet (avant tout morceau de réponse) ;
+    stt_task : transcription déjà lancée sur ce même audio (STT spéculatif) ; repli sur un appel normal si elle a échoué."""
     t0 = time.perf_counter()
     stt_ms = None
     if user_text is None:
         if audio is None:
             raise ValueError("user_text ou audio requis")
-        user_text = await stt.transcribe(*audio)
+        try:
+            user_text = await stt_task if stt_task else await stt.transcribe(*audio)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # la transcription spéculative a échoué : un appel normal (avec repli) reste possible
+            if stt_task is None:
+                raise
+            user_text = await stt.transcribe(*audio)
         stt_ms = (time.perf_counter() - t0) * 1000
     if on_user_text:
         await on_user_text(user_text)
@@ -74,6 +85,10 @@ async def run_turn(*, stt: STT, llm: LLM, tts: TTS, history: list[dict], system_
 
     try:
         async for delta in llm.stream([{"role": "system", "content": system_prompt}] + history):
+            if isinstance(delta, SearchNotice):
+                if on_search:
+                    await on_search(delta.query)
+                continue
             answer += delta
             for ch in chunker.feed(delta):
                 await dispatch(ch)

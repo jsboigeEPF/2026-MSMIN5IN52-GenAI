@@ -1,4 +1,5 @@
-"""STT : Whisper large-v3-turbo hébergé par l'école (API compatible OpenAI /audio/transcriptions)."""
+"""STT : Whisper large-v3-turbo hébergé par l'école (API compatible OpenAI /audio/transcriptions).
+La même classe sert au STT de secours sur OpenRouter (autre URL, clé et modèle)."""
 from __future__ import annotations
 
 import asyncio
@@ -20,7 +21,8 @@ class SchoolWhisper:
     name = "school-whisper"
 
     def __init__(self, client: httpx.AsyncClient, base_url: str, api_key: str, model: str,
-                 language: str = "fr", retries: int = 2, on_event: Callable | None = None) -> None:
+                 language: str = "fr", retries: int = 2, on_event: Callable | None = None, name: str | None = None) -> None:
+        self.name = name or self.name
         self.client, self.url = client, base_url.rstrip("/") + "/audio/transcriptions"
         self.headers, self.model, self.language = {"Authorization": f"Bearer {api_key}"}, model, language
         self.retries, self.emit = retries, on_event or (lambda *a, **k: None)

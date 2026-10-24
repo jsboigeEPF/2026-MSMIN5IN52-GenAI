@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Protocol
 
 
@@ -10,9 +11,20 @@ class STT(Protocol):
         """Transcrit un segment de parole complet (Whisper n'est pas streaming)."""
 
 
+@dataclass(frozen=True)
+class SearchNotice:
+    """Émis dans le flux du LLM quand il décide de chercher sur internet : l'orchestrateur peut meubler l'attente."""
+    query: str
+
+
 class LLM(Protocol):
-    def stream(self, messages: list[dict]) -> AsyncIterator[str]:
-        """Génère la réponse token par token (delta de texte)."""
+    def stream(self, messages: list[dict]) -> AsyncIterator[str | SearchNotice]:
+        """Génère la réponse token par token (delta de texte) ; peut intercaler un SearchNotice avant la réponse."""
+
+
+class WebSearch(Protocol):
+    async def search(self, query: str) -> str:
+        """Résumé factuel et à jour de ce qu'on trouve sur internet pour la requête (texte brut, sans URL)."""
 
 
 class TTS(Protocol):

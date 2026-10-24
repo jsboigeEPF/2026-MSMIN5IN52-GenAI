@@ -42,6 +42,15 @@ class Endpointer:
         return self._in_speech
 
     @property
+    def silence_ms(self) -> int:
+        """Silence continu en cours (0 hors parole) : sert à lancer le STT avant la fin de tour."""
+        return self._silence_run * self.cfg.frame_ms if self._in_speech else 0
+
+    def snapshot(self) -> bytes:
+        """Audio du segment en cours (pré-roll compris), silence final inclus."""
+        return b"".join(self._frames)
+
+    @property
     def voiced_ms(self) -> int:
         return self._voiced * self.cfg.frame_ms if self._in_speech else 0
 

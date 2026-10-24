@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -49,3 +50,12 @@ def missing_for_live(s: Settings) -> list[str]:
             "LLM_MODEL": s.llm_model, "TTS_API_KEY": s.tts_api_key, "TTS_MODEL": s.tts_model,
             "TTS_VOICES": ",".join(s.tts_voices)}
     return [k for k, v in need.items() if not v]
+
+
+def build_system_prompt(s: Settings, today: date | None = None) -> str:
+    """Prompt système : consigne de base, date du jour et, si la recherche est active, consigne d'usage de l'outil."""
+    c = s.cfg["llm"]
+    parts = [c["system_prompt"], c["date_line"].format(date=(today or date.today()).isoformat())]
+    if s.cfg.get("search", {}).get("enabled"):
+        parts.append(c["search_hint"])
+    return " ".join(" ".join(p.split()) for p in parts)

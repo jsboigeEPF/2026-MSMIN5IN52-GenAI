@@ -8,7 +8,9 @@ from collections.abc import AsyncIterator, Callable
 import numpy as np
 
 from src.audio.pcm import SAMPLE_RATE_OUT
+from src.interfaces import SearchNotice
 
+SEARCH_WORDS = ("météo", "actualité")
 CANNED = "Bien sûr. Je peux t'aider avec ça. Commence par une question simple, puis explique le principe."
 
 
@@ -32,8 +34,15 @@ class FakeLLM:
     def __init__(self, reply: str = CANNED, on_event: Callable | None = None):
         self.reply, self.emit = reply, on_event or (lambda *a, **k: None)
 
-    async def stream(self, messages: list[dict], max_tokens: int | None = None) -> AsyncIterator[str]:
+    async def stream(self, messages: list[dict], max_tokens: int | None = None,
+                     allow_search: bool = True) -> AsyncIterator[str | SearchNotice]:
         self.emit("llm_request", provider="fake-llm")
+        last = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "").lower()
+        if allow_search and any(w in last for w in SEARCH_WORDS):  # simule un tour avec recherche internet
+            self.emit("llm_tool_call", provider="fake-llm", tool="web_search")
+            yield SearchNotice(last)
+            await asyncio.sleep(0.3)
+            self.emit("search_done", provider="fake-search", ms=300.0)
         for i, word in enumerate(self.reply.split(" ")):
             await asyncio.sleep(0.005)
             if i == 0:

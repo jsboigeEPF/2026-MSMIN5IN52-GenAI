@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.audio.pcm import SAMPLE_RATE_OUT, read_wav, wav_bytes
-from src.config import load_settings
+from src.config import build_system_prompt, load_settings
 from src.factory import build_providers, make_client
 from src.metrics.cost import CostLedger
 from src.metrics.recorder import Recorder
@@ -50,7 +50,7 @@ async def main() -> None:
             await asyncio.gather(stt.warmup(), llm.warmup(), tts.warmup())
             rec.events.clear()
         audio = read_wav(a.audio_in) if a.audio_in else None
-        r = await run_turn(stt=stt, llm=llm, tts=tts, history=[], system_prompt=s.cfg["llm"]["system_prompt"], rec=rec,
+        r = await run_turn(stt=stt, llm=llm, tts=tts, history=[], system_prompt=build_system_prompt(s), rec=rec,
                            user_text=None if audio else (a.text or "Bonjour, ceci est un test."), audio=audio,
                            first_min=8, rest_min=s.cfg["tts"]["min_chunk_chars"])
     finally:
