@@ -8,7 +8,9 @@ from collections.abc import Awaitable, Callable
 
 import numpy as np
 
-from src.audio.noise import scale_to_snr, to_pcm
+from src.audio.echo import EchoPath
+from src.audio.noise import scale_to_snr, to_f, to_pcm
+from src.audio.pcm import SAMPLE_RATE_OUT, resample
 
 FRAME = 512  # échantillons à 16 kHz = 32 ms
 FRAME_S = FRAME / 16000
@@ -16,8 +18,10 @@ FRAME_S = FRAME / 16000
 
 class MicSim:
     def __init__(self, noise: np.ndarray | None = None, ref_rms: float = 3000.0, snr_db: float | None = None,
-                 rng: np.random.Generator | None = None) -> None:
-        """noise : signal de bruit (boucle) ; son niveau est fixé une fois pour toutes à ref_rms / SNR."""
+                 rng: np.random.Generator | None = None, echo: EchoPath | None = None) -> None:
+        """noise : signal de bruit (boucle) ; son niveau est fixé une fois pour toutes à ref_rms / SNR.
+        echo : si fourni, l'audio de l'agent (`echo_feed`) est réinjecté dans le micro (haut-parleur sans casque)."""
+        self.echo, self._pos = echo, 0          # _pos : horloge d'échantillons du micro
         self.noise_on = True  # permet d'allumer le bruit en cours d'essai (ex. pendant que l'agent parle)
         self._noise = scale_to_snr(noise, ref_rms, snr_db) if noise is not None and snr_db is not None else None
         self._npos = int((rng or np.random.default_rng(0)).integers(len(self._noise))) if self._noise is not None else 0
@@ -34,12 +38,25 @@ class MicSim:
         self._queue.append((np.asarray(samples, dtype=float), fut))
         return fut
 
+    def echo_feed(self, pcm24: bytes) -> None:
+        """Audio de l'agent (PCM16 24 kHz) reçu par le client simulé : il sera joué puis recapté avec le retard de l'écho."""
+        if self.echo is not None:
+            self.echo.feed(to_f(resample(pcm24, SAMPLE_RATE_OUT, 16000)), self._pos)
+
+    def echo_stop(self) -> None:
+        """Lecture interrompue côté client : le haut-parleur se tait."""
+        if self.echo is not None:
+            self.echo.stop(self._pos)
+
     def _next_frame(self) -> tuple[np.ndarray, bool, bool]:
         f = np.zeros(FRAME)
         if self._noise is not None:
             if self.noise_on:
                 f += self._noise[(self._npos + np.arange(FRAME)) % len(self._noise)]
             self._npos = (self._npos + FRAME) % len(self._noise)
+        if self.echo is not None:
+            f += self.echo.read(self._pos, FRAME)
+        self._pos += FRAME
         started = ended = False
         if self._cur is None and self._queue:
             self._cur, self._fut = self._queue.popleft()

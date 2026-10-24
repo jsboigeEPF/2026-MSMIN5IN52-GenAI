@@ -5,7 +5,11 @@ Usage :
   python scripts/run_campaign.py all --quick              # version courte (≈ 10 min) pour valider la chaîne
   python scripts/run_campaign.py all --out data/campaign/run1
   python scripts/run_campaign.py {prepare,stt,vad,latency,barge} --out data/campaign/run1 [--force]
-Sorties dans --out : audio/, stt.jsonl, vad.jsonl, vad_noise.jsonl, latency.jsonl, barge.jsonl, barge_fp.jsonl, meta.json.
+  python scripts/run_campaign.py echosweep --out data/campaign/echo1 --stimuli data/campaign/run1   # écho simulé, hors ligne, gratuit
+  python scripts/run_campaign.py echo --out data/campaign/echo1 --stimuli data/campaign/run1        # écho en direct (payant : voir --dry-run)
+Sorties dans --out : audio/, stt.jsonl, vad.jsonl, vad_noise.jsonl, latency.jsonl, barge.jsonl, barge_fp.jsonl, meta.json ;
+écho : echo_sweep.jsonl, echo_eot.jsonl, eot_pauses.jsonl (hors ligne), echo_barge.jsonl, echo_fp.jsonl (en direct).
+Les phases `echosweep` et `echo` ne font pas partie de `all`.
 L'analyse (p50/p95, WER, figures) est dans notebooks/analysis.ipynb.
 """
 from __future__ import annotations
@@ -28,6 +32,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from src.audio.echo import EchoPath, echo_gain
 from src.audio.noise import mix, noise_signal, scale_to_snr, speech_rms, to_f
 from src.audio.pcm import SAMPLE_RATE_OUT, read_wav, resample, wav_bytes
 from src.config import load_settings
@@ -39,6 +44,7 @@ from src.replay.trials import barge_trial, false_positive_trial, latency_turn
 from src.stt.school_whisper import SchoolWhisper
 from src.tts.fillers import trim_silence
 from src.tts.minimax import MiniMaxTTS
+from src.vad.echo_study import iter_echo_study, iter_pause_study
 from src.vad.endpointer import VadConfig
 from src.vad.scan import clip_probs, scan
 from src.vad.silero import SileroVAD
@@ -64,6 +70,7 @@ def load_cfg(quick: bool) -> dict:
         cfg["barge"]["utterances"] = cfg["barge"]["utterances"][:1]
         cfg["barge"]["conditions"] = [{"noise": "none", "snr": None, "reps": 1}, {"noise": "babble", "snr": 20, "reps": 1}]
         cfg["barge"]["false_positive_trials"] = [{"noise": "babble", "snr": 10}, {"noise": "babble", "snr": 20}]
+        cfg["echo"]["live"] = {"false_gains_db": [-20, 0], "gains_db": [-20], "offsets_s": [1.0]}
     return cfg
 
 
@@ -102,11 +109,15 @@ def stimulus(cfg: dict, st: dict, utt_id: str, noise: str, snr: float | None, rn
     return mix(x, n, speech_rms(st["audio"][utt_id]), snr)
 
 
-def make_mic(cfg: dict, st: dict, noise: str, snr: float | None, rng) -> MicSim:
+def make_mic(cfg: dict, st: dict, noise: str, snr: float | None, rng, echo_db: float | None = None) -> MicSim:
+    echo = None
+    if echo_db is not None:   # hypothèse [H] : la voix de l'agent a le même niveau moyen que les stimuli (mêmes voix MiniMax)
+        ref = ref_rms_global(cfg, st)
+        echo = EchoPath(cfg["echo"]["delay_ms"], echo_gain(echo_db, ref, ref))
     if noise == "none":
-        return MicSim()
+        return MicSim(echo=echo)
     sig = noise_signal(noise, 16000 * 90, rng, babble_clips(cfg, st))
-    return MicSim(sig, ref_rms_global(cfg, st), snr, rng)
+    return MicSim(sig, ref_rms_global(cfg, st), snr, rng, echo=echo)
 
 
 # ---------- plan ----------
@@ -130,6 +141,15 @@ def plan(cfg: dict, quick: bool) -> None:
     print(f"  latency : {lat_turns} tours réels en temps réel ≈ {lat_s / 60:.0f} min")
     print(f"  barge   : {n_barge} essais d'interruption + {n_fp} essais de faux positifs ≈ {barge_s / 60:.0f} min")
     print(f"  total   : ≈ {(stt_s + lat_s + barge_s) / 60 + 3:.0f} min, coût estimé ≈ {cost:.2f} $ (mesuré ≈ 0,01 $/tour)")
+    e = cfg["echo"]
+    n_scen = (len(e["gains_db"]) * len(e["false_agent_ids"]) + (len(e["gains_db"]) + 1) * len(e["agent_ids"])
+              * len(e["user_ids"]) * len(e["offsets_s"]))
+    lv = e["live"]
+    n_efp, n_eb = len(lv["false_gains_db"]), len(lv["gains_db"]) * len(lv["offsets_s"]) * len(cfg["barge"]["utterances"])
+    print("Phases d'écho (hors de `all`) :")
+    print(f"  echosweep : ≈ {n_scen} scénarios de signal, hors ligne, aucun appel réseau, ≈ 2 min")
+    print(f"  echo      : {n_efp} essais de faux barge-in + {n_eb} interruptions par-dessus l'écho en direct ≈ "
+          f"{(n_efp * 25 + n_eb * 30) / 60:.0f} min, coût estimé ≈ {(n_efp + 2 * n_eb) * COST_PER_TURN_USD:.2f} $ (Whisper de l'école gratuit)")
 
 
 # ---------- phases ----------
@@ -262,6 +282,54 @@ def phase_vad(cfg: dict, out: Path, force: bool) -> None:
     log("vad : terminé (dont balayages de calibration)")
 
 
+def phase_echosweep(cfg: dict, out: Path, stim: Path, force: bool) -> None:
+    """Écho simulé hors ligne : faux barge-in, interruptions correctes et fin de tour par gain d'écho et seuils (aucun réseau)."""
+    path_s, path_e = out / "echo_sweep.jsonl", out / "echo_eot.jsonl"
+    if path_s.exists() and not force:
+        return log("echosweep : déjà fait")
+    for p in (path_s, path_e):
+        p.unlink(missing_ok=True)
+    base = yaml.safe_load((ROOT / "configs" / "base.yaml").read_text(encoding="utf-8"))
+    st = load_stimuli(stim)
+    n = {"false": 0, "detect": 0, "eot": 0}
+    for kind, row in iter_echo_study(cfg, base, st["audio"], ref_rms_global(cfg, st), SileroVAD()):
+        append_jsonl(path_e if kind == "eot" else path_s, {"kind": kind, **row})
+        n[kind] += 1
+    path_p = out / "eot_pauses.jsonl"
+    path_p.unlink(missing_ok=True)
+    texts = {t["id"]: t["text"] for t in [*cfg["utterances"], *cfg["barge"]["utterances"]]}
+    for row in iter_pause_study(cfg, base, st["audio"], texts, SileroVAD()):
+        append_jsonl(path_p, row)
+    log(f"echosweep : terminé {n} + pauses de {len(texts)} énoncés")
+
+
+async def phase_echo(cfg: dict, out: Path, stim: Path, force: bool) -> None:
+    """Écho en direct (serveur réel, micro simulé + sortie de l'agent réinjectée) : faux barge-in puis interruptions par-dessus l'écho."""
+    path, path_fp = out / "echo_barge.jsonl", out / "echo_fp.jsonl"
+    if path.exists() and not force:
+        return log("echo : déjà fait")
+    path.unlink(missing_ok=True)
+    path_fp.unlink(missing_ok=True)
+    st, b, lv = load_stimuli(stim), cfg["barge"], cfg["echo"]["live"]
+    prompt = st["audio"][b["prompt"]["id"]]
+    async with server(out, "echo", True) as url:
+        for i, db in enumerate(lv["false_gains_db"]):
+            row = await false_positive_trial(url, make_mic(cfg, st, "none", None, rng_for(cfg, 8, i), db), prompt)
+            append_jsonl(path_fp, {**row, "echo_db": db})
+            log(f"écho {db} dB, agent seul : {row.get('false_interrupts')} faux barge-in")
+        k = 0
+        for ig, db in enumerate(lv["gains_db"]):
+            for ou, u in enumerate(b["utterances"]):
+                for io, off in enumerate(lv["offsets_s"]):
+                    mic = make_mic(cfg, st, "none", None, rng_for(cfg, 9, ig, ou, io), db)
+                    refs = [u["text"], b["prompt"]["text"] + " " + u["text"]]
+                    row = await barge_trial(url, mic, prompt, u, st["audio"][u["id"]], b["prompt"]["text"], off, refs)
+                    append_jsonl(path, {**row, "echo_db": db, "noise": "none", "snr": None})
+                    k += 1
+                    log(f"écho {db} dB #{k} off={off}s {u['id']} : "
+                        f"{'invalide ' + row.get('invalid_reason', '') if not row['valid'] else 'detect_ms=' + str(row.get('detect_ms') and round(row['detect_ms']))}")
+
+
 @contextlib.asynccontextmanager
 async def server(out: Path, name: str, filler: bool):
     env = {**os.environ, "VOICE_FILLER": "1" if filler else "0"}
@@ -359,7 +427,8 @@ def cost_total() -> float:
 
 async def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("phase", choices=["all", "prepare", "stt", "vad", "latency", "barge"])
+    ap.add_argument("phase", choices=["all", "prepare", "stt", "vad", "latency", "barge", "echosweep", "echo"])
+    ap.add_argument("--stimuli", help="dossier d'une campagne dont réutiliser les stimuli audio (phases d'écho ; défaut : --out)")
     ap.add_argument("--out", default="data/campaign/run1")
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
@@ -369,6 +438,7 @@ async def main() -> None:
     if a.dry_run:
         return plan(cfg, a.quick)
     out.mkdir(parents=True, exist_ok=True)
+    stim = ROOT / a.stimuli if a.stimuli else out
     t0, c0 = time.time(), cost_total()
     phases = ["prepare", "stt", "vad", "latency", "barge"] if a.phase == "all" else [a.phase]
     for ph in phases:
@@ -383,6 +453,10 @@ async def main() -> None:
             await phase_latency(cfg, out, a.force)
         elif ph == "barge":
             await phase_barge(cfg, out, a.force)
+        elif ph == "echosweep":
+            phase_echosweep(cfg, out, stim, a.force)
+        elif ph == "echo":
+            await phase_echo(cfg, out, stim, a.force)
     meta_path = out / "meta.json"
     prev = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
     meta = {"started": prev.get("started", datetime.fromtimestamp(t0).isoformat(timespec="seconds")),

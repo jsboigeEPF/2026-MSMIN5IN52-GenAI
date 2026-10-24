@@ -86,6 +86,7 @@ class ReplayClient:
                     if self.play_start is None:
                         self.play_start = now
                     self.audio_s += len(msg) / 48000
+                    self.mic.echo_feed(msg)
                     await self._log(Ev(now, "audio", {"n": len(msg)}))
                     continue
                 m = json.loads(msg)
@@ -96,6 +97,7 @@ class ReplayClient:
                     self.play_start, self.audio_s = None, 0.0
                 elif kind == "interrupt":
                     played = now - self.play_start if self.play_start else 0.0
+                    self.mic.echo_stop()
                     if self._ended_task:
                         self._ended_task.cancel()
                     self.play_start, self.audio_s = None, 0.0
