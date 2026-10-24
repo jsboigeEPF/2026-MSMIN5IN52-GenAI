@@ -44,13 +44,17 @@ Un tour sans navigateur : `.venv/bin/python scripts/run_turn.py --text "Bonjour"
 ```bash
 .venv/bin/python -m pytest -q          # tests unitaires et d'intégration, sans réseau
 .venv/bin/ruff check src tests
-.venv/bin/python scripts/browser_smoke.py   # Chrome, micro simulé (serveur sur le port 8765)
+# Tests de bout en bout : démarrer d'abord un serveur sur le port 8765 (ajouter VOICE_DRY_RUN=1 pour ne rien payer)
+.venv/bin/uvicorn src.transport.app:app --port 8765
+.venv/bin/python scripts/browser_smoke.py   # Chrome, micro simulé
 .venv/bin/python scripts/ws_barge_test.py data/audio/question1.wav data/audio/question2.wav   # interruption (même serveur)
 .venv/bin/python scripts/run_campaign.py all --dry-run   # plan, durée, coût
 .venv/bin/python scripts/run_campaign.py all --out data/campaign/<run>
 # écho simulé (hors ligne, gratuit) ; la variante en direct `echo` est payante
 .venv/bin/python scripts/run_campaign.py echosweep --out data/campaign/echo1 --stimuli data/campaign/<run>
 ```
+
+Les WAV de test (`data/audio/`, gitignoré, absent d'un clone neuf) sont à fournir : parole mono, voix de l'étudiant ou synthèse. Les phases de campagne synthétisent leurs propres stimuli.
 
 Analyse : `notebooks/analysis.ipynb` (`CAMPAIGN_RUN=data/campaign/<run>`). Protocole et définitions : [docs/METRICS.md](docs/METRICS.md). Résultats du run1 : [docs/DECISIONS.md](docs/DECISIONS.md) (entrée 11).
 
@@ -61,6 +65,7 @@ Analyse : `notebooks/analysis.ipynb` (`CAMPAIGN_RUN=data/campaign/<run>`). Proto
 - Foule de voix : la fin de tour n'est pas détectée dès 10 dB de SNR ; taux d'interruptions correctes du run1 : voir DECISIONS (11).
 - L'accroche réduit le temps au premier son, pas l'attente du contenu ; latences p50/p95 mesurées : DECISIONS (11).
 - Recherche internet : 2–3 s d'attente (couverte par une accroche) ; le résultat brut n'est pas gardé en mémoire de conversation.
+- Réglages recommandés par les mesures (fin de tour adaptative, traitement de l'écho) étudiés mais non appliqués : voir DECISIONS (18).
 - Mesures sur voix et bruits synthétiques, petits échantillons.
 
 ## Données et confidentialité
