@@ -22,6 +22,7 @@ class Settings:
     tts_base_url: str
     tts_api_key: str
     tts_model: str
+    tts_model_alt: str
     tts_voices: list[str]
     budget_usd: float
     cfg: dict = field(default_factory=dict)  # contenu de configs/base.yaml
@@ -37,7 +38,7 @@ def load_settings(config_path: str = "configs/base.yaml", dotenv_path: str = ".e
         openrouter_api_key=e.get("OPENROUTER_API_KEY", ""),
         llm_model=e.get("LLM_MODEL", ""), llm_model_alt=e.get("LLM_MODEL_ALT", ""),
         tts_base_url=e.get("TTS_BASE_URL", "https://openrouter.ai/api/v1"), tts_api_key=e.get("TTS_API_KEY", ""),
-        tts_model=e.get("TTS_MODEL", ""),
+        tts_model=e.get("TTS_MODEL", ""), tts_model_alt=e.get("TTS_MODEL_ALT", ""),
         tts_voices=[v.strip() for v in e.get("TTS_VOICES", "").split(",") if v.strip()],
         budget_usd=float(e.get("BUDGET_MAX_EUR", "10")),
         cfg=yaml.safe_load(Path(config_path).read_text(encoding="utf-8")),

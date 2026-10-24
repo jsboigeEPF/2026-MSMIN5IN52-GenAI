@@ -15,6 +15,7 @@ class STT(Protocol):
 class SearchNotice:
     """Émis dans le flux du LLM quand il décide de chercher sur internet : l'orchestrateur peut meubler l'attente."""
     query: str
+    announce: str = ""  # phrase courte écrite par le LLM pour dire ce qu'il cherche (vide : accroche générique)
 
 
 class LLM(Protocol):

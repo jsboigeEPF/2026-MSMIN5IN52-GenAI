@@ -42,8 +42,11 @@ Définitions exactes dans @docs/METRICS.md. Événements : `vad_speech_start`, `
 ## Accès internet (function calling)
 Le LLM reçoit l'outil `web_search`. Flux : 1re requête en flux → si `tool_calls` (ou balises DSML en texte, retenues par `ToolMarkupGuard`) → `SearchNotice` dans le flux → la session joue une accroche de recherche (si aucun morceau de réponse n'est encore parti) → `WebSearch.search` (OpenRouter, plugin `web`) → 2e requête (sans outil) avec le résultat → réponse en flux, découpée et synthétisée comme d'habitude. Une recherche au plus par réponse ; l'historique garde accroches + réponse, pas le résultat brut.
 
+### Attente de recherche
+Le LLM remplit `announce` (phrase courte qui dit ce qu'il cherche) ; la session la synthétise pendant la recherche et la joue avant la réponse (repli : accroche générique pré-enregistrée). Si rien n'a commencé `filler.search_wait_after_s` après l'avis de recherche, une 2e phrase brève est jouée. Les rangs des morceaux ne doivent plus se décaler dès que la réponse démarre.
+
 ## STT spéculatif et repli
-Dès `stt.speculative_ms` de silence dans un énoncé, la session lance le STT sur l'audio déjà capté ; la parole qui reprend l'annule ; à la fin de tour, `run_turn(stt_task=…)` réutilise la tâche. Si le STT échoue : repli `FallbackSTT` (2e fournisseur), puis après `stt.fallback_to_text_after` échecs consécutifs la session passe en `text_only` (micro ignoré) jusqu'à `voice_retry`.
+Dès `stt.speculative_ms` de silence dans un énoncé, la session lance le STT sur l'audio déjà capté ; la parole qui reprend l'annule ; à la fin de tour, `run_turn(stt_task=…)` réutilise la tâche. Secours TTS : `FallbackTTS` (2e modèle, avant le 1er octet) ; si tout le TTS échoue, le texte reste affiché (`tts_down`). Si le STT échoue : repli `FallbackSTT` (2e fournisseur), puis après `stt.fallback_to_text_after` échecs consécutifs la session passe en `text_only` (micro ignoré) jusqu'à `voice_retry`.
 
 ## Écho
 Casque recommandé pour les mesures. Sans casque : coupure de la détection pendant les premières ms de lecture + seuil relevé, ou AEC (voir RISKS_AND_PLAN_B).
@@ -56,7 +59,7 @@ Une source `AudioFile` horodatée remplace le micro (même interface) ; permet t
 
 ## Protocole WebSocket du prototype (`/ws`)
 Client → serveur : binaire = PCM16 16 kHz mono (trames de 512 échantillons) ; JSON `{"type":"text","text":…}` (mode texte), `{"type":"playback_ended"}`, `{"type":"interrupted","played_s":…}`, `{"type":"voice_retry"}`.
-Serveur → client : binaire = PCM16 24 kHz mono ; JSON `ready` (voix), `state` (listening/thinking/speaking), `vad`, `transcript`, `agent_chunk`, `searching`, `metrics`, `audio_end`, `interrupt`, `truncate`, `fallback` (`mode`: text/voice), `error`.
+Serveur → client : binaire = PCM16 24 kHz mono ; JSON `ready` (voix), `state` (listening/thinking/speaking), `vad`, `transcript`, `agent_chunk`, `searching`, `metrics`, `audio_end`, `interrupt`, `truncate`, `fallback` (`mode`: text/voice), `tts_down`, `error`.
 
 ## Structure cible
 ```

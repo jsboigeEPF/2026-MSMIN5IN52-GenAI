@@ -19,6 +19,7 @@ class TurnResult:
     stt_ms: float | None
     first_audio_ms: float  # début du tour -> premier chunk PCM du 1er morceau
     total_ms: float
+    tts_failed: bool = False  # au moins un morceau n'a pas pu être synthétisé (réponse affichée à l'écrit seulement)
 
 
 async def run_turn(*, stt: STT, llm: LLM, tts: TTS, history: list[dict], system_prompt: str, rec: Recorder,
@@ -27,10 +28,10 @@ async def run_turn(*, stt: STT, llm: LLM, tts: TTS, history: list[dict], system_
                    on_user_text: Callable[[str], Awaitable[None]] | None = None,
                    on_chunk: Callable[[str], Awaitable[None]] | None = None,
                    on_audio: Callable[[bytes, int], Awaitable[None]] | None = None,
-                   on_search: Callable[[str], Awaitable[None]] | None = None,
+                   on_search: Callable[[str, str], Awaitable[None]] | None = None,
                    stt_task: asyncio.Task[str] | None = None) -> TurnResult:
     """on_chunk(texte) : un morceau part vers le TTS ; on_audio(pcm, idx) : audio prêt, dans l'ordre de lecture (idx = rang du morceau) ;
-    on_search(requête) : le LLM cherche sur internet (avant tout morceau de réponse) ;
+    on_search(requête, annonce) : le LLM cherche sur internet (avant tout morceau de réponse) ; annonce = phrase à dire pendant la recherche ;
     stt_task : transcription déjà lancée sur ce même audio (STT spéculatif) ; repli sur un appel normal si elle a échoué."""
     t0 = time.perf_counter()
     stt_ms = None
@@ -51,6 +52,7 @@ async def run_turn(*, stt: STT, llm: LLM, tts: TTS, history: list[dict], system_
     history.append({"role": "user", "content": user_text})
 
     first_audio: list[float] = []
+    tts_errors: list[str] = []
     ordered: asyncio.Queue[tuple[int, asyncio.Queue] | None] = asyncio.Queue()  # une file par morceau, drainées dans l'ordre
 
     async def synth(text: str, q: asyncio.Queue, is_first: bool) -> list[bytes]:
@@ -62,6 +64,11 @@ async def run_turn(*, stt: STT, llm: LLM, tts: TTS, history: list[dict], system_
                     rec("turn_first_audio", ms=round(first_audio[0], 1))
                 parts.append(pcm)
                 q.put_nowait(pcm)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001  TTS (secours compris) en panne : le texte reste affiché, le tour continue
+            tts_errors.append(f"{type(e).__name__}: {e}"[:200])
+            rec("tts_error", error=tts_errors[-1])
         finally:
             q.put_nowait(None)
         return parts
@@ -87,7 +94,7 @@ async def run_turn(*, stt: STT, llm: LLM, tts: TTS, history: list[dict], system_
         async for delta in llm.stream([{"role": "system", "content": system_prompt}] + history):
             if isinstance(delta, SearchNotice):
                 if on_search:
-                    await on_search(delta.query)
+                    await on_search(delta.query, delta.announce)
                 continue
             answer += delta
             for ch in chunker.feed(delta):
@@ -105,4 +112,5 @@ async def run_turn(*, stt: STT, llm: LLM, tts: TTS, history: list[dict], system_
     history.append({"role": "assistant", "content": answer})
     total = (time.perf_counter() - t0) * 1000
     rec("turn_done", ms=round(total, 1), chunks=len(tasks))
-    return TurnResult(user_text, answer, list(audio_parts), stt_ms, first_audio[0] if first_audio else total, total)
+    return TurnResult(user_text, answer, list(audio_parts), stt_ms, first_audio[0] if first_audio else total, total,
+                      tts_failed=bool(tts_errors))

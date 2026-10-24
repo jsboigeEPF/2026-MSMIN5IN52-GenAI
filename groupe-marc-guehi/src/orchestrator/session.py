@@ -27,13 +27,15 @@ class ConversationSession:
                  send_audio: Callable[[bytes], Awaitable[None]], fillers: FillerBank | None = None,
                  filler_min_speech_ms: int = 1800, first_min: int = 8, rest_min: int = 20, max_history: int = 20,
                  barge_min_ms: int = 300, barge_prob: float = 0.75, strict_after_s: float = 0.5,
-                 search_fillers: FillerBank | None = None, speculative_ms: int = 0, text_fallback_after: int = 0) -> None:
+                 search_fillers: FillerBank | None = None, speculative_ms: int = 0, text_fallback_after: int = 0,
+                 wait_fillers: FillerBank | None = None, search_wait_after_s: float = 0.0) -> None:
         self.stt, self.llm, self.tts, self.vad, self.ep, self.rec = stt, llm, tts, vad, endpointer, rec
         self.system_prompt, self.send_json, self.send_audio = system_prompt, send_json, send_audio
         self.fillers, self.filler_min_speech_ms = fillers, filler_min_speech_ms
         self.first_min, self.rest_min, self.max_history = first_min, rest_min, max_history
         self.barge_min_ms, self.barge_prob, self.strict_after_s = barge_min_ms, barge_prob, strict_after_s
         self.search_fillers = search_fillers
+        self.wait_fillers, self.search_wait_after_s = wait_fillers, search_wait_after_s  # 2e phrase si la recherche traîne
         self.speculative_ms, self.text_fallback_after = speculative_ms, text_fallback_after
         self.history: list[dict] = []
         self.state = LISTENING
@@ -44,6 +46,7 @@ class ConversationSession:
         self._strict_until = 0.0
         self._task: asyncio.Task | None = None
         self._failsafe: asyncio.Task | None = None
+        self._aux: list[asyncio.Task] = []        # annonce de recherche et phrase d'attente en cours (annulées avec le tour)
         self._carry: bytes | None = None          # audio d'un tour interrompu avant d'être transcrit
         self._reset_response()
         self._interrupt: dict | None = None       # instantané pour affiner la troncature avec le retour du client
@@ -145,7 +148,7 @@ class ConversationSession:
         await self.send_json({"type": "truncate", "text": heard})
 
     async def close(self) -> None:
-        for t in (self._task, self._failsafe, self._spec):
+        for t in (self._task, self._failsafe, self._spec, *self._aux):
             if t:
                 t.cancel()
 
@@ -153,11 +156,12 @@ class ConversationSession:
     async def _barge_in(self) -> None:
         t = time.monotonic()
         self.rec("barge_in_detected", voiced_ms=self.ep.voiced_ms, state=self.state)
-        for task in (self._task, self._failsafe):
+        for task in (self._task, self._failsafe, *self._aux):
             if task:
                 task.cancel()
         if self._task:
-            await asyncio.gather(self._task, return_exceptions=True)
+            await asyncio.gather(self._task, *self._aux, return_exceptions=True)
+        self._aux = []
         if not self._user_recorded and self._current_audio:
             self._carry = self._current_audio[0]  # la phrase pas encore transcrite sera reprise avec la suivante
         played = max(0.0, t - self._first_audio_at - 0.05) if self._first_audio_at else 0.0
@@ -197,6 +201,7 @@ class ConversationSession:
             spec.cancel()
             spec = None
         self._carry = None
+        self._aux = []
         self._reset_response()
         self._current_audio = audio
         self._task = asyncio.create_task(self._turn(audio, user_text, speech_ms, spec))
@@ -217,6 +222,7 @@ class ConversationSession:
         spoken: list[str] = []                    # accroches dites avant la réponse (pour l'historique)
         lead: list[float] = []                    # [1er son de l'attente, fin estimée de l'attente], en s depuis la détection
         searched = False
+        announces: list[asyncio.Task] = []        # annonce de recherche (synthétisée en parallèle de la recherche)
         await self._set_state(THINKING)
         if audio is not None:
             await self.send_json({"type": "user_pending"})
@@ -246,6 +252,7 @@ class ConversationSession:
         async def on_audio(pcm: bytes, idx: int) -> None:
             self._durs[idx + self._off] += duration_s(pcm, SAMPLE_RATE_OUT)
             if not first_content:
+                await asyncio.gather(*announces, return_exceptions=True)  # l'annonce de recherche finit d'abord (ordre de lecture)
                 first_content.append(time.perf_counter() - t_detect)
                 if self._first_audio_at is None:
                     self._first_audio_at = time.monotonic()
@@ -253,29 +260,91 @@ class ConversationSession:
                     await self._set_state(SPEAKING)
             await self.send_audio(pcm)
 
-        async def on_search(query: str) -> None:
-            """Le LLM cherche sur internet : une phrase d'attente (« je regarde ») couvre le silence, sauf si l'agent a déjà
-            commencé sa réponse (les rangs des morceaux ne doivent pas se décaler)."""
-            nonlocal searched
-            searched = True
-            self.rec("search_notice", chars=len(query))
-            await self.send_json({"type": "searching"})
-            if self.search_fillers is None or len(self._texts) > self._off:
-                return
-            f = self.search_fillers.pick()
-            now = time.perf_counter() - t_detect
-            spoken.append(f.text)
-            lead[:] = [lead[0] if lead else now, max(lead[1] if lead else 0.0, now) + f.dur]
-            self._texts.append(f.text)
-            self._durs.append(f.dur)
+        def reserve(text: str, dur: float, kind: str) -> int:
+            """Réserve le rang d'une phrase d'attente : sans appel await, donc avant toute réponse (les rangs ne se décalent pas)."""
+            self._texts.append(text)
+            self._durs.append(dur)
             self._off += 1
-            self.rec("filler_sent", text=f.text, dur_s=round(f.dur, 2), kind="search")
+            spoken.append(text)
+            self.rec("filler_sent", text=text, dur_s=round(dur, 2), kind=kind)
+            return len(self._texts) - 1
+
+        def waiting(start: float, dur: float) -> None:
+            """Met à jour l'attente couverte par l'audio de remplissage : 1er son, et fin de lecture estimée."""
+            lead[:] = [lead[0] if lead else start, max(lead[1] if lead else 0.0, start) + dur]
+
+        async def play_filler(f, kind: str) -> None:
+            now = time.perf_counter() - t_detect
+            reserve(f.text, f.dur, kind)
+            waiting(now, f.dur)
             await self.send_json({"type": "agent_chunk", "text": f.text})
             if self._first_audio_at is None:
                 self._first_audio_at = time.monotonic()
             await self.send_audio(f.pcm)
             if self.state != SPEAKING:
                 await self._set_state(SPEAKING)
+
+        async def announce_search(text: str) -> None:
+            """L'agent dit ce qu'il cherche (phrase écrite par le LLM, synthétisée pendant que la recherche s'exécute).
+            Sans audio (TTS en panne), on retombe sur l'accroche générique pré-enregistrée."""
+            idx = reserve(text, 0.0, "search_announce")
+            start, sent = None, False
+            try:
+                async for pcm in self.tts.stream(text):
+                    if not sent:
+                        sent = True
+                        start = time.perf_counter() - t_detect
+                        await self.send_json({"type": "agent_chunk", "text": text})
+                        if self._first_audio_at is None:
+                            self._first_audio_at = time.monotonic()
+                    self._durs[idx] += duration_s(pcm, SAMPLE_RATE_OUT)
+                    await self.send_audio(pcm)
+                    if self.state != SPEAKING:
+                        await self._set_state(SPEAKING)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001  l'annonce est un confort : la conversation continue sans
+                self.rec("tts_error", error=f"{type(e).__name__}: {e}"[:200], kind="search_announce")
+            if sent:
+                waiting(start, self._durs[idx])
+                return
+            spoken.remove(text)  # rien n'a été entendu : ni dans l'historique ni dans la troncature
+            self._texts[idx] = ""
+            if self.search_fillers is not None:
+                f = self.search_fillers.pick()
+                self._texts[idx], self._durs[idx] = f.text, f.dur
+                spoken.append(f.text)
+                waiting(time.perf_counter() - t_detect, f.dur)
+                await self.send_json({"type": "agent_chunk", "text": f.text})
+                if self._first_audio_at is None:
+                    self._first_audio_at = time.monotonic()
+                await self.send_audio(f.pcm)
+                if self.state != SPEAKING:
+                    await self._set_state(SPEAKING)
+
+        async def wait_more() -> None:
+            """La recherche traîne : une 2e phrase brève évite un long silence, sauf si la réponse est déjà en route."""
+            await asyncio.sleep(self.search_wait_after_s)
+            await asyncio.gather(*announces, return_exceptions=True)  # après l'annonce, pour respecter l'ordre de lecture
+            if len(self._texts) == self._off and not first_content:
+                await play_filler(self.wait_fillers.pick(), "search_wait")
+
+        async def on_search(query: str, announce: str = "") -> None:
+            """Le LLM cherche sur internet : l'agent dit ce qu'il cherche (ou une accroche générique) pour couvrir l'attente, sauf
+            s'il a déjà commencé sa réponse (les rangs des morceaux ne doivent pas se décaler)."""
+            nonlocal searched
+            searched = True
+            self.rec("search_notice", chars=len(query), announced=bool(announce))
+            await self.send_json({"type": "searching"})
+            if len(self._texts) > self._off:
+                return
+            if announce:
+                announces.append(asyncio.create_task(announce_search(announce)))  # en tâche : ne retarde pas la recherche
+                self._aux.append(announces[-1])
+            elif self.search_fillers is not None:
+                await play_filler(self.search_fillers.pick(), "search")
+            if self.wait_fillers is not None and self.search_wait_after_s > 0:
+                self._aux.append(asyncio.create_task(wait_more()))
 
         prompt = self.system_prompt + (FILLER_HINT.format(filler.text) if filler else "")
         try:
@@ -286,6 +355,8 @@ class ConversationSession:
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001  toute erreur de fournisseur doit rester visible sans tuer la session
+            for t in self._aux:
+                t.cancel()
             self.rec("turn_error", error=f"{type(e).__name__}: {e}"[:300])
             if self.history and self.history[-1]["role"] == "user":
                 self.history.pop()
@@ -301,6 +372,11 @@ class ConversationSession:
                     self.rec("fallback_text_mode", failures=self._stt_fails)
                     await self.send_json({"type": "fallback", "mode": "text", "reason": "stt"})
             return
+        await asyncio.gather(*announces, return_exceptions=True)
+        for t in self._aux:  # la phrase « encore un instant » ne doit plus partir une fois la réponse donnée
+            t.cancel()
+        if r.tts_failed:
+            await self.send_json({"type": "tts_down"})
         self._turn_complete = True
         if spoken:
             self.history[-1]["content"] = " ".join(spoken + [self.history[-1]["content"]])

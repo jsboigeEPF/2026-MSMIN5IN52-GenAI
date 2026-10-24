@@ -14,12 +14,13 @@ Une étape = une session. ☐ à faire · ◐ commencé · ☑ fait. Échéance 
 | 7 ☑ | Campagne de mesures : `scripts/run_campaign.py`, `configs/campaign.yaml`, `notebooks/analysis.ipynb` (WER/SNR, VAD, latence p50/p95, interruptions, balayages de calibration) — **fait** (run `data/campaign/run1`) | Tableaux et figures reproductibles ; résultats et recommandations dans DECISIONS (11) |
 | 8 ☑ | Polissage UI (rôles, badge « interrompu », voyant de voix, médiane de session, mobile, `prefers-reduced-motion`, focus du champ texte sur erreur), `README.md`, docs à jour — **fait** | Critères « terminé » vérifiés dans DECISIONS (12) ; reste à valider au vrai micro/casque par l'étudiant |
 | 9 ☑ | Accès internet (outil `web_search`, accroche d'attente, protection contre les appels d'outil écrits en texte) — **fait** | Vérifié avec les vrais services, en Chrome : question avec recherche (DECISIONS 13) |
-| 10+ ☐ | Extensions restantes : routage entre APIs (STT/LLM/TTS de repli), plus de voix. **Local écarté** (consigne du 2026-10-22 : APIs uniquement) | Après lundi |
+| 10 ☑ | Robustesse (2026-10-24) : l'agent **dit ce qu'il cherche** pendant la recherche web + 2e phrase si elle traîne ; **TTS de secours** (autre modèle OpenRouter) et réponse écrite si toute la voix est en panne ; bascule vers le mode texte **testée dans Chrome** — **fait** | Vérifié avec les vrais services (DECISIONS 15) ; mesure de la durée du silence résiduel à refaire en campagne |
+| 11+ ☐ | Extensions restantes : routage entre APIs selon la latence, plus de voix. **Local écarté** (consigne du 2026-10-22 : APIs uniquement, confirmée le 2026-10-24) | Après lundi |
 
 Cible réaliste : étapes 1–6 pour lundi (prototype), 7 si le temps le permet. Difficulté 4/5 en 6 jours : le barge-in propre et la campagne de mesure complète sont les éléments à risque.
 
 ## Pistes d'amélioration (retours de l'étudiant et idées)
 - **Mémoire au sein de la conversation** *(piste de l'étudiant)* : les 5 derniers messages pourraient suffire. État actuel : l'historique est déjà conservé pendant la session (`session.max_history_messages: 20` dans `configs/base.yaml`, troncature au texte entendu en cas d'interruption). À faire : fixer la valeur (5 ?) en comparant qualité des réponses et latence/coût du LLM, et décider si la mémoire doit survivre à une reconnexion (aujourd'hui, une nouvelle conversation repart de zéro).
-- **Attente de recherche** : 2–3 s de silence après l'accroche « je regarde ça » ; piste : seconde accroche si la recherche dépasse un seuil, ou recherche lancée plus tôt (spéculative).
+- **Attente de recherche** : annonce parlée + 2e phrase faites (étape 10) ; reste la piste d'une recherche lancée plus tôt (spéculative).
 - LLM spéculatif sur transcription partielle : voir DECISIONS.
 - **Débit de voix** réglable par voix dans `configs/base.yaml` (`tts.speeds`).

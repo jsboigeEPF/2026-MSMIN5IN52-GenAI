@@ -220,6 +220,7 @@ function onMessage(ev) {
     }
     curAgent = null; curUser = null;
   }
+  else if (m.type === "tts_down") addErr("Voix de l'agent indisponible (service de synthèse en panne) — sa réponse reste affichée à l'écrit.");
   else if (m.type === "error") { addErr(`${m.message} — ${m.hint || ""}`); if (running) $("text").focus(); curAgent?.remove(); curAgent = null; curUser?.remove(); curUser = null; }
 }
 

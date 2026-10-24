@@ -16,3 +16,7 @@ def test_prompt_has_date_and_search_hint_when_search_is_enabled():
 
 def test_no_search_hint_when_search_is_disabled():
     assert "web_search" not in build_system_prompt(settings(False))
+
+
+def test_search_hint_asks_for_spoken_announce():
+    assert "announce" in build_system_prompt(settings(True))

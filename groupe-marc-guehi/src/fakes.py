@@ -30,9 +30,20 @@ class FakeSTT:
         pass
 
 
+class BrokenSTT:
+    """STT toujours en panne (injection de panne : VOICE_FAIL_STT=1, tests de bascule)."""
+    name = "broken-stt"
+
+    async def transcribe(self, pcm16: bytes, sample_rate: int) -> str:
+        raise RuntimeError("panne simulée du STT")
+
+    async def warmup(self) -> None:
+        pass
+
+
 class FakeLLM:
-    def __init__(self, reply: str = CANNED, on_event: Callable | None = None):
-        self.reply, self.emit = reply, on_event or (lambda *a, **k: None)
+    def __init__(self, reply: str = CANNED, on_event: Callable | None = None, announce: str = ""):
+        self.reply, self.emit, self.announce = reply, on_event or (lambda *a, **k: None), announce
 
     async def stream(self, messages: list[dict], max_tokens: int | None = None,
                      allow_search: bool = True) -> AsyncIterator[str | SearchNotice]:
@@ -40,7 +51,7 @@ class FakeLLM:
         last = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "").lower()
         if allow_search and any(w in last for w in SEARCH_WORDS):  # simule un tour avec recherche internet
             self.emit("llm_tool_call", provider="fake-llm", tool="web_search")
-            yield SearchNotice(last)
+            yield SearchNotice(last, self.announce)
             await asyncio.sleep(0.3)
             self.emit("search_done", provider="fake-search", ms=300.0)
         for i, word in enumerate(self.reply.split(" ")):

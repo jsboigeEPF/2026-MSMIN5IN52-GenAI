@@ -23,8 +23,10 @@ WEB_SEARCH_TOOL = {"type": "function", "function": {
     "description": "Recherche sur internet. Pour toute information actuelle ou que tu ne connais pas de mémoire "
                    "(météo, actualité, scores, prix, horaires, événements récents). Search the web for current information.",
     "parameters": {"type": "object", "properties": {"query": {
-        "type": "string", "description": "Requête autonome et précise, dans la langue de la conversation (lieu, date, sujet)."}},
-        "required": ["query"]}}}
+        "type": "string", "description": "Requête autonome et précise, dans la langue de la conversation (lieu, date, sujet)."},
+        "announce": {"type": "string", "description": "Phrase très courte (4 à 9 mots), dite à voix haute à l'utilisateur pendant "
+                     "la recherche, qui dit ce que tu cherches. Ex. : « Je regarde la météo à Lyon demain. »"}},
+        "required": ["query", "announce"]}}}
 SEARCH_UNAVAILABLE = "SEARCH UNAVAILABLE: the search failed. Tell the user briefly that you could not check, and do not guess."
 
 
@@ -63,11 +65,15 @@ class ToolMarkupGuard:
         return [q.strip() for q in DSML_QUERY.findall(self.captured) if q.strip()]
 
 
-def _query_of(args: str) -> str:
+def _arg_of(args: str, key: str) -> str:
     try:
-        return str(json.loads(args or "{}").get("query", "")).strip()
+        return str(json.loads(args or "{}").get(key, "")).strip()
     except (json.JSONDecodeError, AttributeError):
         return ""
+
+
+def _query_of(args: str) -> str:
+    return _arg_of(args, "query")
 
 
 class OpenRouterLLM:
@@ -114,14 +120,15 @@ class OpenRouterLLM:
         queries = [q for c in (calls[i] for i in sorted(calls)) if (q := _query_of(c["args"]))]
         query = " ; ".join(queries) or next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
         self.emit("llm_tool_call", provider=model, tool=call["name"], chars=len(query))
-        yield SearchNotice(query)
+        announce = _arg_of(call["args"], "announce")  # une seule annonce : celle du premier appel
+        yield SearchNotice(query, announce)
         try:
             result = await self.searcher.search(query)
         except SearchError as e:
             self.emit("search_error", provider=model, error=str(e)[:200])
             result = SEARCH_UNAVAILABLE
         follow = messages + [
-            {"role": "assistant", "content": None, "tool_calls": [
+            {"role": "assistant", "content": announce or None, "tool_calls": [
                 {"id": call["id"], "type": "function", "function": {"name": call["name"], "arguments": call["args"] or "{}"}}]},
             {"role": "tool", "tool_call_id": call["id"], "content": result}]
         async for delta in self._request(model, follow, max_tokens, False, {}):

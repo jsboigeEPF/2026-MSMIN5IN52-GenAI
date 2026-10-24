@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
         stt, llm, tts = build_providers(s, pick_voice(s.tts_voices), app.state.client, lambda *a, **k: None, False)
         await asyncio.gather(stt.warmup(), llm.warmup(), tts.warmup(), return_exceptions=True)
         keepalive = asyncio.create_task(_keepalive(stt, llm, tts, s.cfg.get("keepalive_s", 25)))
-    app.state.fillers, app.state.search_fillers = {}, {}   # par voix
+    app.state.fillers, app.state.search_fillers, app.state.wait_fillers = {}, {}, {}   # par voix
     fcfg = dict(s.cfg.get("filler", {}))
     if os.environ.get("VOICE_FILLER") == "0":  # campagne de mesures : comparaison avec / sans accroche
         fcfg["enabled"] = False
@@ -61,11 +61,13 @@ async def lifespan(app: FastAPI):
         speeds = s.cfg.get("tts", {}).get("speeds", {})
         for v in s.tts_voices or ["fake"]:
             tts_v = build_providers(s, v, app.state.client, lambda *a, **k: None, dry)[2]
+            tts_v = getattr(tts_v, "primary", tts_v)  # voix de secours exclue : le cache est rangé par modèle/voix principaux
             tag = f"{'dry' if dry else s.tts_model.replace('/', '_')}_{v}_{speeds.get(v, 1.0)}"
             try:
                 app.state.fillers[v] = await load_fillers(tts_v, fcfg["texts"], Path("data/fillers"), tag)
                 if s.cfg.get("search", {}).get("enabled"):
                     app.state.search_fillers[v] = await load_fillers(tts_v, fcfg["search_texts"], Path("data/fillers"), tag)
+                    app.state.wait_fillers[v] = await load_fillers(tts_v, fcfg["search_wait_texts"], Path("data/fillers"), tag)
             except Exception as e:  # noqa: BLE001  sans accroches la conversation reste utilisable
                 print(f"accroches indisponibles pour {v} : {type(e).__name__}: {e}")
     yield
@@ -103,10 +105,12 @@ async def ws_endpoint(ws: WebSocket) -> None:
     stt, llm, tts = build_providers(s, voice, st.client, rec, st.dry)
     bank = FillerBank(list(st.fillers[voice])) if st.fillers.get(voice) else None
     search_bank = FillerBank(list(st.search_fillers[voice])) if st.search_fillers.get(voice) else None
+    wait_bank = FillerBank(list(st.wait_fillers[voice])) if st.wait_fillers.get(voice) else None
     session = ConversationSession(
         stt=stt, llm=llm, tts=tts, vad=st.vad, endpointer=Endpointer(vcfg), rec=rec,
         system_prompt=build_system_prompt(s), send_json=send_json, send_audio=ws.send_bytes,
-        fillers=bank, search_fillers=search_bank, speculative_ms=stc.get("speculative_ms", 0),
+        fillers=bank, search_fillers=search_bank, wait_fillers=wait_bank,
+        search_wait_after_s=fcfg.get("search_wait_after_s", 0.0), speculative_ms=stc.get("speculative_ms", 0),
         text_fallback_after=stc.get("fallback_to_text_after", 0), filler_min_speech_ms=fcfg.get("min_speech_ms", 1800),
         rest_min=s.cfg["tts"]["min_chunk_chars"], max_history=sc["max_history_messages"],
         barge_min_ms=sc["barge_in_min_speech_ms"], barge_prob=sc["barge_in_min_prob"], strict_after_s=sc["strict_after_s"])

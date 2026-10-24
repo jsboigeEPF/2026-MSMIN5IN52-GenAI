@@ -1,16 +1,20 @@
 """Construction des briques (réelles ou factices) à partir de la configuration."""
 from __future__ import annotations
 
+import os
+
 import httpx
 
 from src.config import Settings, missing_for_live
-from src.fakes import FakeLLM, FakeSTT, FakeTTS
+from src.fakes import BrokenSTT, FakeLLM, FakeSTT, FakeTTS
 from src.fallback.stt import FallbackSTT
+from src.fallback.tts import FallbackTTS
 from src.llm.openrouter import OpenRouterLLM
 from src.metrics.cost import load_prices
 from src.search.openrouter_web import OpenRouterWebSearch
 from src.stt.school_whisper import SchoolWhisper
 from src.tts.minimax import MiniMaxTTS
+from src.tts.openrouter_pcm import PcmTTS
 
 
 def make_client() -> httpx.AsyncClient:
@@ -28,7 +32,9 @@ def build_providers(s: Settings, voice: str, client: httpx.AsyncClient | None, o
     llm_cfg, search_cfg, stt_cfg = s.cfg.get("llm", {}), s.cfg.get("search", {}), s.cfg.get("stt", {})
     lang = stt_cfg.get("language", "fr")
     stt = SchoolWhisper(client, s.stt_base_url, s.stt_api_key, s.stt_model, language=lang, on_event=on_event)
-    if stt_cfg.get("fallback_model"):
+    if os.environ.get("VOICE_FAIL_STT") == "1":  # injection de panne pour tester la bascule en mode texte (STT principal et secours)
+        stt = BrokenSTT()
+    elif stt_cfg.get("fallback_model"):
         backup = SchoolWhisper(client, s.openrouter_base_url, s.openrouter_api_key, stt_cfg["fallback_model"],
                                language=lang, retries=0, on_event=on_event, name="openrouter-asr")
         stt = FallbackSTT(stt, backup, on_event=on_event)
@@ -43,4 +49,8 @@ def build_providers(s: Settings, voice: str, client: httpx.AsyncClient | None, o
                         prices=prices, on_event=on_event, searcher=searcher)
     tts = MiniMaxTTS(client, s.tts_base_url, s.tts_api_key, s.tts_model, voice, speed=s.cfg.get("tts", {}).get("speeds", {}).get(voice),
                      prices=prices, on_event=on_event)  # débit par voix (la voix féminine française est plus lente)
+    tts_cfg = s.cfg.get("tts", {})
+    if s.tts_model_alt and tts_cfg.get("fallback_voice"):  # voix de secours : autre modèle, même clé OpenRouter
+        backup = PcmTTS(client, s.tts_base_url, s.tts_api_key, s.tts_model_alt, tts_cfg["fallback_voice"], prices=prices, on_event=on_event)
+        tts = FallbackTTS(tts, backup, on_event=on_event)
     return stt, llm, tts

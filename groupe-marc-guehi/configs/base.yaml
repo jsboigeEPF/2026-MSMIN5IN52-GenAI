@@ -29,11 +29,16 @@ filler:
     - "Bon, voyons ça."
     - "Hmm, laisse-moi réfléchir un instant."
     - "Alors, voyons un peu ça."
-  search_texts:             # jouées seulement quand le LLM décide de chercher sur internet
+  search_texts:             # secours de l'annonce parlée (« je regarde la météo à Lyon ») : jouées quand le LLM décide de chercher
     - "Je regarde ça."
     - "Une seconde, je cherche."
     - "Je vérifie sur internet."
     - "Laisse-moi regarder."
+  search_wait_after_s: 3.0  # si la recherche dure plus longtemps (et que la réponse n'a pas commencé) : une 2e phrase brève
+  search_wait_texts:
+    - "Encore un instant."
+    - "Je n'ai pas encore la réponse."
+    - "Ça arrive, un petit instant."
 llm:
   max_tokens: 200
   temperature: 0.6
@@ -45,7 +50,8 @@ llm:
     Tu as accès à internet via l'outil web_search : utilise-le pour tout ce qui est actuel ou que tu ne peux pas
     savoir de mémoire (météo, actualité, scores, prix, horaires, événements récents), jamais pour la conversation
     courante ni les connaissances générales. Une phrase d'attente (« je regarde ça ») est dite automatiquement
-    pendant la recherche : n'annonce pas que tu cherches, donne directement le résultat.
+    pendant la recherche (renseigne `announce` : une phrase très courte qui dit ce que tu cherches). Ne la répète pas
+    et n'annonce pas que tu cherches : donne directement le résultat.
 stt:
   language: fr
   fallback_model: qwen/qwen3-asr-1.7b   # OpenRouter /audio/transcriptions, essayé si le Whisper de l'école échoue
@@ -58,6 +64,7 @@ search:                                 # accès internet : outil `web_search` a
   timeout_s: 20
   language: français                    # langue du résumé renvoyé par la recherche
 tts:
+  fallback_voice: longanhuan_v3.6   # voix du TTS de secours (TTS_MODEL_ALT, PCM) si MiniMax échoue ; accent marqué en français
   response_format: mp3      # MiniMax ne streame qu'en mp3 (décodage en PCM côté serveur)
   min_chunk_chars: 20       # découpe en phrases avant envoi au TTS
   speeds:                   # débit relatif par voix (mesuré : ~6,6 s pour la phrase test, contre 8,9 s et 7,6 s à 1.0)

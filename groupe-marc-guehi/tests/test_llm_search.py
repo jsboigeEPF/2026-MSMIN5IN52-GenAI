@@ -149,3 +149,18 @@ async def test_markup_tool_call_is_executed_as_a_real_one_and_never_spoken():
     out = await collect(make(handler, search))
     assert out == [SearchNotice("dernière course F1 ; météo Paris"), "Il fait ", "10 degrés."]
     assert search.queries == ["dernière course F1 ; météo Paris"]
+
+
+async def test_announce_is_forwarded_and_kept_in_the_tool_call_message():
+    bodies = []
+    call = sse(delta(tool_calls=[{"index": 0, "id": "call-1", "function": {
+        "name": "web_search", "arguments": json.dumps({"query": "météo Lyon demain", "announce": "Je regarde la météo à Lyon."})}}]))
+
+    def handler(req):
+        bodies.append(json.loads(req.content))
+        return httpx.Response(200, content=call if len(bodies) == 1 else ANSWER)
+
+    out = await collect(make(handler, FakeSearch()))
+    assert out[0] == SearchNotice("météo Lyon demain", "Je regarde la météo à Lyon.")
+    assert bodies[1]["messages"][-2]["content"] == "Je regarde la météo à Lyon."  # le modèle sait qu'il l'a déjà dit
+    assert "announce" in bodies[0]["tools"][0]["function"]["parameters"]["properties"]
