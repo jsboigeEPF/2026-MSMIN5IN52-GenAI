@@ -1,8 +1,8 @@
 # Contraintes
 
 ## Budget cloud : < 15 € au total (cible interne : 10 €, réserve 5 €)
-**Précision (2026-10-20) :** l'énoncé fixe 15 € par prudence ; l'étudiant indique que ce n'est pas une priorité. Le compteur (`data/cost_ledger.jsonl`) avertit au dépassement mais ne bloque pas (`hard_stop` activable). Ordre de grandeur mesuré : ≈ 0,01 $ par tour réel complet, ≈ 0,017 $ avec recherche internet (≈ 0,007 $ la recherche). Cumul réel (somme des `cost_usd`, pas `total_usd`) ≈ 2,2 $ au 2026-10-22 (DECISIONS 13f).
-Tarifs **[V]** 2026-10-20 (<https://developers.openai.com/api/docs/pricing>) : gpt-4o-mini-transcribe ≈ 0,003 $/min ; gpt-4o-mini-tts 0,60 $/1M tokens texte + 12 $/1M tokens audio ; gpt-5-mini 0,25/2,00 $ par 1M tokens (in/out). Conversion $→€ : hypothèse 1 $ = 1 €  (marge de sécurité).
+**Précision (2026-10-20) :** l'énoncé fixe 15 € par prudence ; l'étudiant indique que ce n'est pas une priorité. Le compteur (`data/cost_ledger.jsonl`) avertit au dépassement mais ne bloque pas (`hard_stop` activable). Ordre de grandeur mesuré : ≈ 0,01 $ par tour réel complet, ≈ 0,017 $ avec recherche internet (≈ 0,007 $ la recherche). **Coût cumulé** : source unique = la somme des `cost_usd` de `data/cost_ledger.jsonl` (ne pas lire `total_usd`, propre à chaque processus ; DECISIONS 13f) ; le chiffre à jour est dans la dernière entrée de DECISIONS.
+**Historique** (cadrage du 2026-10-20, avant le choix OpenRouter/école ; tarifs réels : `configs/pricing.yaml`). Tarifs OpenAI **[V]** 2026-10-20 (<https://developers.openai.com/api/docs/pricing>) : gpt-4o-mini-transcribe ≈ 0,003 $/min ; gpt-4o-mini-tts 0,60 $/1M tokens texte + 12 $/1M tokens audio ; gpt-5-mini 0,25/2,00 $ par 1M tokens (in/out). Conversion $→€ : hypothèse 1 $ = 1 €  (marge de sécurité).
 Hypothèse [H] : durée TTS ≈ 1 min audio ≈ quelques centimes (équivalence tokens audio/seconde non vérifiée → à calibrer sur un appel réel).
 
 **Méthode d'estimation par campagne**
@@ -17,7 +17,7 @@ Ordre de grandeur [H] : 1 tour ≈ 0,001–0,005 €. Campagne complète de ≈1
 - Cache des audios TTS de test (un dialogue n'est synthétisé qu'une fois).
 
 ## Matériel
-MacBook Air M5, 24 Go, pas de GPU externe. Réaliste : VAD, STT Whisper small/turbo ou Parakeet, LLM ~4B 4 bits, TTS Kokoro. Non réaliste : LLM > 14B en temps réel, plusieurs modèles lourds simultanés, fine-tuning. Pas de refroidissement actif sur Air : throttling possible sur sessions longues → noter température/charge, campagnes courtes, cloud et local jamais comparés en même temps (CPU partagé).
+MacBook Air M5, 24 Go, pas de GPU externe. Seul le VAD Silero tourne en local (STT, LLM et TTS sont des APIs, DECISIONS 13). Historique du cadrage : STT Whisper small/turbo ou Parakeet, LLM ~4B 4 bits, TTS Kokoro, écartés. Non réaliste : LLM > 14B en temps réel, plusieurs modèles lourds simultanés, fine-tuning. Pas de refroidissement actif sur Air : throttling possible sur sessions longues → noter température/charge, campagnes courtes, cloud et local jamais comparés en même temps (CPU partagé).
 
 ## Clés API
 `.env` local (gitignoré), `.env.example` sans valeur commitée. Chargement via variables d'environnement. Jamais dans traces, logs, notebooks. Révoquer les clés en fin de projet.

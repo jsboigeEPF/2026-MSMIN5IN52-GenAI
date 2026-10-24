@@ -42,11 +42,14 @@ Un tour sans navigateur : `.venv/bin/python scripts/run_turn.py --text "Bonjour"
 ## Tests et mesures
 
 ```bash
-.venv/bin/python -m pytest -q          # 68 tests, sans réseau
+.venv/bin/python -m pytest -q          # tests unitaires et d'intégration, sans réseau
 .venv/bin/ruff check src tests
 .venv/bin/python scripts/browser_smoke.py   # Chrome, micro simulé (serveur sur le port 8765)
+.venv/bin/python scripts/ws_barge_test.py data/audio/question1.wav data/audio/question2.wav   # interruption (même serveur)
 .venv/bin/python scripts/run_campaign.py all --dry-run   # plan, durée, coût
 .venv/bin/python scripts/run_campaign.py all --out data/campaign/<run>
+# écho simulé (hors ligne, gratuit) ; la variante en direct `echo` est payante
+.venv/bin/python scripts/run_campaign.py echosweep --out data/campaign/echo1 --stimuli data/campaign/<run>
 ```
 
 Analyse : `notebooks/analysis.ipynb` (`CAMPAIGN_RUN=data/campaign/<run>`). Protocole et définitions : [docs/METRICS.md](docs/METRICS.md). Résultats du run1 : [docs/DECISIONS.md](docs/DECISIONS.md) (entrée 11).
@@ -54,12 +57,12 @@ Analyse : `notebooks/analysis.ipynb` (`CAMPAIGN_RUN=data/campaign/<run>`). Proto
 ## Limites connues
 
 - Mono-utilisateur (un VAD à état partagé).
-- Pas d'AEC serveur : sans casque, l'écho peut déclencher de faux barge-in.
-- Foule de voix : la fin de tour n'est pas détectée dès 10 dB de SNR ; interruptions correctes 67 % (run1).
-- Latence perçue ≈ 2 s (p50 sans accroche) ; l'accroche réduit le temps au premier son (≈ 0,5 s), pas l'attente du contenu.
+- Pas d'AEC serveur : sans casque, l'écho peut déclencher de faux barge-in (étude simulée : DECISIONS 18 ; l'annulation d'écho du navigateur n'a pas été mesurée).
+- Foule de voix : la fin de tour n'est pas détectée dès 10 dB de SNR ; taux d'interruptions correctes du run1 : voir DECISIONS (11).
+- L'accroche réduit le temps au premier son, pas l'attente du contenu ; latences p50/p95 mesurées : DECISIONS (11).
 - Recherche internet : 2–3 s d'attente (couverte par une accroche) ; le résultat brut n'est pas gardé en mémoire de conversation.
 - Mesures sur voix et bruits synthétiques, petits échantillons.
 
 ## Données et confidentialité
 
-`.env`, `data/` (audio, traces, coûts) sont gitignorés. L'audio du micro est envoyé au serveur STT de l'école et le texte à OpenRouter : ne rien dire de personnel. Coût cumulé du projet : somme des `cost_usd` de `data/cost_ledger.jsonl` (≈ 2,2 $ au 2026-10-22 ; ne pas lire `total_usd`, propre à chaque processus).
+`.env`, `data/` (audio, traces, coûts) sont gitignorés. L'audio du micro est envoyé au serveur STT de l'école et le texte à OpenRouter : ne rien dire de personnel. Coût cumulé du projet : somme des `cost_usd` de `data/cost_ledger.jsonl` (ne pas lire `total_usd`, propre à chaque processus ; voir [docs/CONSTRAINTS.md](docs/CONSTRAINTS.md)).

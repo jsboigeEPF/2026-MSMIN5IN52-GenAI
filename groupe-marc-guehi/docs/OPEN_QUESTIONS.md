@@ -1,13 +1,13 @@
 # Questions ouvertes
 
-Tranchées le 2026-10-20 (voir DECISIONS) : langue = français ; échéance = lundi 2026-10-26 ; interface = navigateur ; livrables d'évaluation = plus tard.
+Tranchées (voir DECISIONS) : langue = français ; échéance = lundi 2026-10-26 ; interface = navigateur ; livrables d'évaluation = plus tard ; clés, modèles, endpoints STT/LLM/TTS et crédit OpenRouter = résolus aux étapes 1-2 (questions 1 à 3 closes, voir TECH_STACK et DECISIONS 6-8) ; casque = recommandé, non vérifié (question 5).
 
 | # | Question | À trancher avant | Hypothèse actuelle |
 |---|---|---|---|
-| 1 | URL et clé du serveur Whisper de l'école ; clé OpenRouter ; identifiants exacts des modèles (LLM, TTS) | Étape 1 | À remplir dans `.env` |
-| 2 | OpenRouter expose-t-il un endpoint TTS (et STT) utilisable en streaming ? Format audio ? | Étape 1 (script de test) | Type `/audio/speech`, à confirmer |
-| 3 | Crédit OpenRouter disponible et prix par modèle (budget < 15 € toujours valable ?) | Étape 2 | Budget interne 10 € |
+| 1 | ~~URL et clé du serveur Whisper de l'école ; clé OpenRouter ; identifiants exacts des modèles~~ **close** | Étape 1 | `.env` rempli |
+| 2 | ~~OpenRouter expose-t-il un endpoint TTS (et STT) en streaming ?~~ **close** : oui (DECISIONS 6-7) | Étape 1 | — |
+| 3 | ~~Crédit OpenRouter et prix par modèle~~ **close** : prix dans `configs/pricing.yaml`, coût suivi dans `data/cost_ledger.jsonl` (CONSTRAINTS) | Étape 2 | — |
 | 4 | Baseline speech-to-speech Realtime : autorisée malgré l'exigence cascade ? | Étape 7 | Non |
 | 5 | Casque disponible pour les tests live ? | Étape 4 | Oui |
-| 6 | Seuils de l'« interruption correcte » (500 ms / 300 ms) | Étape 5 | Valeurs de METRICS.md |
+| 6 | Seuils de l'« interruption correcte » | Étape 5 | Valeurs de `configs/campaign.yaml` (`barge.thresholds`), définition dans METRICS |
 | 7 | Livrables d'évaluation (rapport, slides) | Étape 8 | Plus tard |

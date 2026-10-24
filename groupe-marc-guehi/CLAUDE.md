@@ -34,7 +34,7 @@
 - Tests : `.venv/bin/python -m pytest -q` ; lint : `.venv/bin/ruff check src tests`
 - Serveur web : `.venv/bin/uvicorn src.transport.app:app --port 8000` puis ouvrir http://localhost:8000 (`VOICE_DRY_RUN=1` = faux fournisseurs)
 - Test navigateur automatisé (Chrome, micro simulé) : `.venv/bin/python scripts/browser_smoke.py` ; micro simulé WebSocket : `scripts/ws_client.py` ; interruption : `scripts/ws_barge_test.py` (serveur sur le port 8765) ; bascule texte : serveur lancé avec `VOICE_FAIL_STT=1` puis `scripts/browser_fallback_test.py`
-- Campagne de mesures : `.venv/bin/python scripts/run_campaign.py all --dry-run` puis `all [--quick] --out data/campaign/<run>` ; analyse : `notebooks/analysis.ipynb`
+- Campagne de mesures : `.venv/bin/python scripts/run_campaign.py all --dry-run` puis `all [--quick] --out data/campaign/<run>` ; écho simulé hors ligne : `run_campaign.py echosweep --out data/campaign/echo1 --stimuli data/campaign/run1` ; analyse : `notebooks/analysis.ipynb`
 
 ## Docs détaillés
 - @docs/PROJECT_BRIEF.md — énoncé, périmètre, "terminé"
