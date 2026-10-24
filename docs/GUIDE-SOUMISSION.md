@@ -20,7 +20,7 @@ Ne renommez, ne déplacez et ne supprimez aucun fichier appartenant au dépôt o
 - Reliez la PR finale à l'issue de réservation du sujet.
 - Ouvrez une PR brouillon ou publiez un point d'étape assez tôt pour rendre la progression visible.
 - Répartissez les tâches et relisez le code des autres membres.
-- Gardez une baseline simple pour mesurer l'apport du système GenAI.
+- Quand le sujet s'y prête, comparez à une approche plus simple pour montrer l'apport du système GenAI.
 - Testez les modes d'échec : réponse invalide, indisponibilité d'une API, entrée vide, timeout, absence de GPU ou dépassement de budget.
 - Utilisez des données publiques, synthétiques ou dûment autorisées.
 
@@ -36,7 +36,7 @@ groupe-<nom-court>/
 ├── .env.example
 ├── .gitignore
 ├── src/                 # ou application équivalente
-├── tests/
+├── tests/               # si pertinent
 ├── notebooks/           # si pertinent
 └── slides/              # PDF recommandé
 ```
@@ -46,9 +46,9 @@ Le README du groupe doit présenter : membres, sujet, problématique, architectu
 Le projet contient également :
 
 - le code source ;
-- un notebook avec analyses/visualisations **ou** une UI/démo fonctionnelle ;
-- des tests exécutables et leur résultat ;
-- les slides de soutenance ;
+- une UI/démo fonctionnelle **ou** un notebook qui montre le système en action (par exemple une conversation agentique commentée) ;
+- des tests et leur résultat quand le sujet s'y prête : c'est un plus, pas une obligation ;
+- les slides de soutenance, qui peuvent arriver dans une PR complémentaire avant la soutenance ;
 - un `.env.example` ne contenant que les noms des variables.
 
 ## 5. Secrets, données et fichiers lourds
@@ -75,6 +75,8 @@ La PR publique identifie les membres uniquement par leurs comptes GitHub (`@pseu
 La PR est obligatoire : un lien vers un dépôt externe, un fichier envoyé séparément ou un push direct ne constitue pas une remise.
 
 **Date limite : lundi 26 octobre 2026 à 23:59.**
+
+La PR n'a pas besoin d'être parfaite à cette date : elle se met à jour à chaque push. Les slides et d'éventuelles corrections peuvent suivre dans une PR complémentaire ; envoyez-la assez tôt pour qu'elle puisse être intégrée avant la soutenance.
 
 ## 7. Préparer la soutenance
 

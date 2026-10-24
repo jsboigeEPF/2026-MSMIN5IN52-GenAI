@@ -62,9 +62,9 @@ Chaque groupe fournit au minimum :
 
 - le code source et des instructions reproductibles ;
 - un `README.md` complet ;
-- un notebook explicatif avec analyses et visualisations **ou** une interface/démonstration fonctionnelle ;
-- des tests adaptés au projet ;
-- les slides de soutenance ;
+- une interface/démonstration fonctionnelle **ou** un notebook explicatif qui montre le système en action ;
+- des tests quand le sujet s'y prête (un plus, pas une obligation) ;
+- les slides de soutenance (elles peuvent suivre dans une PR complémentaire) ;
 - un fichier `.env.example` sans valeur secrète ;
 - un historique Git montrant la participation des membres.
 

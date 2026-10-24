@@ -15,8 +15,8 @@ Décrivez le MVP, l'architecture, les résultats mesurés et les limites princip
 - [ ] Cette PR ne modifie qu'un dossier de groupe et aucun travail d'un autre groupe.
 - [ ] Le dossier n'est présent qu'une fois dans le dépôt.
 - [ ] Le README explique installation, exécution, tests, résultats, limites et contributions.
-- [ ] Le code, le notebook ou la démonstration et les slides sont présents.
-- [ ] Les tests ont été exécutés et leur commande est documentée.
+- [ ] Le code, le notebook ou la démonstration sont présents (les slides peuvent suivre dans une PR complémentaire).
+- [ ] Si le projet comporte des tests, ils ont été exécutés et leur commande est documentée.
 - [ ] Le diff ne contient ni `.env`, ni clé, token, mot de passe, cookie ou donnée confidentielle.
 - [ ] Aucun environnement virtuel, `node_modules`, poids de modèle ou artefact lourd n'est ajouté.
 - [ ] Les licences des modèles, données, bibliothèques et médias sont respectées.

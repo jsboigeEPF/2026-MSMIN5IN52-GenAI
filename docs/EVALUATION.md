@@ -59,4 +59,4 @@ La difficulté affichée dans le catalogue indique l'ampleur technique du sujet,
 
 ## Remise
 
-La Pull Request finale doit être ouverte au plus tard le **lundi 26 octobre 2026 à 23:59**, soit deux jours avant la soutenance. Le contenu évalué est celui de la PR à cette échéance. Les corrections ultérieures doivent être clairement identifiées.
+La Pull Request finale doit être ouverte au plus tard le **lundi 26 octobre 2026 à 23:59**, soit deux jours avant la soutenance. Les slides et d'éventuelles corrections peuvent suivre dans une PR complémentaire, à envoyer assez tôt pour être intégrée avant la soutenance.
