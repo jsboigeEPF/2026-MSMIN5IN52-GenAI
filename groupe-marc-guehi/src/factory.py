@@ -9,7 +9,7 @@ from src.config import Settings, missing_for_live
 from src.fakes import BrokenSTT, FakeLLM, FakeSTT, FakeTTS
 from src.fallback.stt import FallbackSTT
 from src.fallback.tts import FallbackTTS
-from src.llm.openrouter import OpenRouterLLM
+from src.llm.openrouter import OpenRouterLLM, make_force_search
 from src.metrics.cost import load_prices
 from src.search.openrouter_web import OpenRouterWebSearch
 from src.stt.school_whisper import SchoolWhisper
@@ -46,7 +46,9 @@ def build_providers(s: Settings, voice: str, client: httpx.AsyncClient | None, o
                                        prices=prices, on_event=on_event)
     llm = OpenRouterLLM(client, s.openrouter_base_url, s.openrouter_api_key, s.llm_model, s.llm_model_alt or None,
                         max_tokens=llm_cfg.get("max_tokens", 200), temperature=llm_cfg.get("temperature", 0.6),
-                        prices=prices, on_event=on_event, searcher=searcher)
+                        prices=prices, on_event=on_event, searcher=searcher,
+                        force_search=make_force_search(search_cfg.get("skip_regex", ""), search_cfg.get("skip_max_words", 0))
+                        if searcher and search_cfg.get("force") else None)
     tts = MiniMaxTTS(client, s.tts_base_url, s.tts_api_key, s.tts_model, voice, speed=s.cfg.get("tts", {}).get("speeds", {}).get(voice),
                      prices=prices, on_event=on_event)  # débit par voix (la voix féminine française est plus lente)
     tts_cfg = s.cfg.get("tts", {})

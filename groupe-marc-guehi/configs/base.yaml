@@ -54,11 +54,14 @@ llm:
   date_line: "Nous sommes le {date}."
   filler_hint: " Tu viens de dire à voix haute « {} » : enchaîne directement avec la réponse, sans nouvelle formule d'attente ni salutation."  # ajouté au prompt après une accroche
   search_hint: >            # ajouté au prompt si `search.enabled`
-    Tu as accès à internet via l'outil web_search : utilise-le pour tout ce qui est actuel ou que tu ne peux pas
-    savoir de mémoire (météo, actualité, scores, prix, horaires, événements récents), jamais pour la conversation
-    courante ni les connaissances générales. Une phrase d'attente (« je regarde ça ») est dite automatiquement
-    pendant la recherche (renseigne `announce` : une phrase très courte qui dit ce que tu cherches). Ne la répète pas
-    et n'annonce pas que tu cherches : donne directement le résultat.
+    Tu as accès à internet via l'outil web_search. Ta mémoire est ancienne et peut être fausse : cherche d'abord, puis réponds,
+    dès que la question porte sur une personne réelle (sportif, artiste, élu, dirigeant), un club, une entreprise, un produit, un
+    lieu précis ou un événement, et pour tout ce qui change avec le temps (météo, actualité, scores, résultats, prix, horaires,
+    équipe ou poste actuel, sorties récentes). Si tu hésites entre répondre de mémoire et chercher, cherche. Ne cherche pas
+    pour la conversation courante (salutations, remerciements, reformulations) ni pour des connaissances stables
+    (mathématiques, définitions, grammaire, histoire ancienne). N'invente jamais un fait sur une personne ou un événement.
+    Une phrase d'attente (« je regarde ça ») est dite automatiquement pendant la recherche (renseigne `announce` : une phrase
+    très courte qui dit ce que tu cherches). Ne la répète pas et n'annonce pas que tu cherches : donne directement le résultat.
 stt:
   language: fr
   fallback_model: qwen/qwen3-asr-1.7b   # OpenRouter /audio/transcriptions, essayé si le Whisper de l'école échoue
@@ -70,6 +73,9 @@ search:                                 # accès internet : outil `web_search` a
   max_tokens: 250
   timeout_s: 20
   language: français                    # langue du résumé renvoyé par la recherche
+  force: true                           # tool_choice=required : web_search ou no_search (échappatoire) ; le prompt seul ne suffisait pas
+  skip_max_words: 0                     # énoncé de ce nombre de mots ou moins : pas de recherche forcée
+  skip_regex: "((bonjour|salut|coucou|merci|ok|okay|super|parfait|très bien|oui|non|d'accord|beaucoup|bien|au revoir|à bientôt|bonne journée|bonne soirée|c'est gentil|et toi|ça va|comment vas-tu|comment ça va|tu vas bien) ?)+"  # énoncé entièrement fait de formules de politesse (ponctuation ignorée)
 tts:
   fallback_voice: longanhuan_v3.6   # voix du TTS de secours (TTS_MODEL_ALT, PCM) si MiniMax échoue ; accent marqué en français
   response_format: mp3      # MiniMax ne streame qu'en mp3 (décodage en PCM côté serveur)

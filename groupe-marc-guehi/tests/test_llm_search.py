@@ -164,3 +164,36 @@ async def test_announce_is_forwarded_and_kept_in_the_tool_call_message():
     assert out[0] == SearchNotice("météo Lyon demain", "Je regarde la météo à Lyon.")
     assert bodies[1]["messages"][-2]["content"] == "Je regarde la météo à Lyon."  # le modèle sait qu'il l'a déjà dit
     assert "announce" in bodies[0]["tools"][0]["function"]["parameters"]["properties"]
+
+
+async def test_force_search_sets_tool_choice_except_small_talk():
+    from src.llm.openrouter import make_force_search
+    force = make_force_search("((bonjour|merci|beaucoup|comment vas-tu) ?)+", 0)
+    assert force("Parle-moi de Ronald Araujo, le défenseur") and not force("Bonjour, comment vas-tu ?") and force("Parle de Pedri")
+    bodies = []
+
+    def handler(req):
+        bodies.append(json.loads(req.content))
+        return httpx.Response(200, content=ANSWER)
+
+    llm = OpenRouterLLM(httpx.AsyncClient(transport=httpx.MockTransport(handler)), "http://x", "k", "m",
+                        searcher=FakeSearch(), force_search=force)
+    _ = [d async for d in llm.stream([{"role": "user", "content": "Parle-moi de Ronald Araujo, le défenseur"}])]
+    _ = [d async for d in llm.stream([{"role": "user", "content": "merci beaucoup"}])]
+    assert bodies[0]["tool_choice"] == "required" and "tool_choice" not in bodies[1]
+    assert [t["function"]["name"] for t in bodies[0]["tools"]] == ["web_search", "no_search"]
+
+
+async def test_no_search_answers_directly_without_notice():
+    NO = sse(delta(tool_calls=[{"index": 0, "id": "c", "function": {"name": "no_search", "arguments": "{}"}}]))
+    n = []
+
+    def handler(req):
+        n.append(json.loads(req.content))
+        return httpx.Response(200, content=NO if len(n) == 1 else ANSWER)
+
+    search = FakeSearch()
+    llm = OpenRouterLLM(httpx.AsyncClient(transport=httpx.MockTransport(handler)), "http://x", "k", "m",
+                        searcher=search, force_search=lambda t: True)
+    out = [d async for d in llm.stream([{"role": "user", "content": "combien font 2 fois 3"}])]
+    assert out == ["Il fait ", "10 degrés."] and search.queries == [] and "tools" not in n[1]
