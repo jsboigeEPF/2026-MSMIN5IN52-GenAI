@@ -132,6 +132,23 @@ async def test_invalid_llm_output_fails_the_run_and_cleans_up(
     assert not (git_repo / ".mini-opencode" / "runs" / "run-1").exists()
 
 
+async def test_finalize_refuses_content_changed_after_approval(
+    git_repo: Path, make_runner: RunnerFactory
+) -> None:
+    runner = make_runner(FakeLLM({"planner": [PLAN], "coder": [GOOD_PATCH]}))
+    run_id = await runner.start(start_request(git_repo))
+    state = await runner.status(run_id)
+    assert state.worktree_path is not None
+    (Path(state.worktree_path) / "calc.py").write_text(FIXED_CALC + "import os  # not what was approved\n")
+
+    state = await runner.decide(run_id, approve())
+
+    assert (state.status, state.terminal_reason) == (ProcessStatus.FAILED, "commit_failed")
+    assert state.error_message is not None and "approved" in state.error_message
+    assert (git_repo / "calc.py").read_text() == BUGGY_CALC
+    assert state.git_commit_hash is None
+
+
 async def test_resume_and_status_are_noops_on_suspended_or_finished_runs(
     git_repo: Path, make_runner: RunnerFactory
 ) -> None:
