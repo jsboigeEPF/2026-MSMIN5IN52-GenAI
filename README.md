@@ -87,7 +87,10 @@ passer `README.txt`, par exemple, et non `sandbox/README.txt`.
 | `move_file(source, destination, confirmed=false)` | Déplace ou renomme un fichier ou répertoire dans le sandbox. Refuse une destination existante ; ne la remplace pas. |
 
 `write_file`, `create_directory` et `move_file` exigent `confirmed=true` côté
-serveur. Ce booléen seul ne prouve pas qu'une personne a consenti : c'est le
+serveur, sous forme de vrai booléen JSON : `"true"`, `"yes"` ou `1` sont
+refusés. Un appel refusé pour un mauvais type d'argument est rejeté par la
+validation MCP avant d'atteindre l'outil ; il n'apparaît donc pas dans le
+journal d'audit. Ce booléen seul ne prouve pas qu'une personne a consenti : c'est le
 client de démonstration qui recueille l'accord. Un autre client MCP pourrait
 envoyer directement `confirmed=true` ; le serveur ne dispose pas d'un mécanisme
 d'authentification ou de consentement indépendant.

@@ -145,6 +145,14 @@ class TestsConsentement(TestAvecSandbox):
                     self.assertEqual(self.journal()[-1]["outcome"], "denied_or_error")
         self.assertEqual(self.instantane(), avant)
 
+    def test_confirmed_doit_etre_le_booleen_true(self):
+        avant = self.instantane()
+        for outil, arguments in MODIFICATIONS.items():
+            for valeur in ("true", "yes", "1", 1):
+                with self.subTest(outil=outil, confirmed=valeur):
+                    self.assertRefuse(outil, **arguments, confirmed=valeur)
+        self.assertEqual(self.instantane(), avant)
+
 
 class TestsEntreesHostiles(TestAvecSandbox):
     def test_chemins_hors_sandbox_ou_reserves_refuses(self):

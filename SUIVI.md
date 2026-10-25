@@ -57,6 +57,10 @@ Machine de référence : RTX 5060 8 Go, Ollama 0.23.2, Python 3.12, `mcp` 1.30.0
   et vérifier que le test échoue.
 - Avancer étape par étape, tester chaque changement, et **demander à
   l'utilisateur** avant tout choix de comportement (voir §5).
+- Git : tout le travail se fait sur la branche **`finalisation-projet`**
+  (partie de `master`). Un commit par changement logique, message en
+  français préfixé `test:`, `fix:`, `feat:` ou `docs:`. La mise à jour de ce
+  fichier part dans le commit du changement qu'elle décrit.
 - Modèle principal : `qwen3:8b`. `mistral-nemo:12b` sert de comparaison, à
   traiter plus tard.
 
@@ -94,17 +98,10 @@ Machine de référence : RTX 5060 8 Go, Ollama 0.23.2, Python 3.12, `mcp` 1.30.0
 
 ## 5. Décisions en attente (à faire trancher par l'utilisateur)
 
-1. **`confirmed` accepte d'autres valeurs que `true`.** `"true"`, `"yes"` et `1`
-   sont convertis en `true` par la validation de FastMCP/pydantic avant
-   d'atteindre `_require_confirmation`, et le journal enregistre alors
-   `confirmed: true`. Pas de risque avec notre client, qui force un vrai
-   `true` après `OUI`, mais le README promet « exige `confirmed=true` ».
-   Correctif possible : annoter `confirmed` en booléen strict. Expliqué à
-   l'utilisateur le 26/10, réponse attendue (recommandation : corriger).
-2. **3 ou 5 outils ?** Le sujet parle de « trois outils ». Recommandation :
+1. **3 ou 5 outils ?** Le sujet parle de « trois outils ». Recommandation :
    garder les 5 et présenter `read_file`, `list_files` et `write_file` comme le
    cœur.
-3. *(Mineur)* En cas de refus, les outils renvoient un texte `Erreur ...` avec
+2. *(Mineur)* En cas de refus, les outils renvoient un texte `Erreur ...` avec
    `isError=false`, au lieu de lever une exception (`isError=true`). Les LLM le
    comprennent bien ; les tests acceptent les deux formes.
 
@@ -131,3 +128,12 @@ Machine de référence : RTX 5060 8 Go, Ollama 0.23.2, Python 3.12, `mcp` 1.30.0
   question repart de zéro ; seuls les appels d'outils d'une même question
   restent en contexte (comportement actuel, `messages` réinitialisé dans
   `run_chat`). À mentionner dans les limites du README.
+- **Corrigé : `confirmed` est un booléen strict** (`StrictBool` de pydantic
+  dans `server.py`). Avant, `"true"`, `"yes"`, `"1"` et `1` étaient convertis
+  en `true` par la validation MCP et ouvraient la modification ; le journal
+  enregistrait alors `true`. Test : `test_confirmed_doit_etre_le_booleen_true`
+  (il échouait avant le correctif). 16 tests OK. Le schéma vu par le LLM ne
+  change pas (`boolean`).
+- Limite constatée : un appel rejeté par la validation des types (mauvais
+  type, argument manquant) n'atteint pas l'outil et n'est donc **pas
+  journalisé**. Documenté dans le README (contrat du serveur).

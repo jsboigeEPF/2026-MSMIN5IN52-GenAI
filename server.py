@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import StrictBool
 
 PROJECT_DIR = Path(__file__).resolve().parent
 ROOT = (PROJECT_DIR / "sandbox").resolve()
@@ -188,7 +189,7 @@ def write_file(
     path: str,
     content: str,
     mode: Literal["overwrite", "append"],
-    confirmed: bool = False,
+    confirmed: StrictBool = False,
 ) -> str:
     """Create/replace or append to a UTF-8 file inside sandbox/. Requires confirmed=true."""
     args = _audit_arguments(
@@ -257,7 +258,7 @@ def write_file(
 
 
 @mcp.tool()
-def create_directory(path: str, confirmed: bool = False) -> str:
+def create_directory(path: str, confirmed: StrictBool = False) -> str:
     """Create a directory and any missing parent directories inside sandbox/. Requires confirmed=true."""
     args = _audit_arguments(
         path=path if isinstance(path, str) else repr(path),
@@ -283,7 +284,7 @@ def create_directory(path: str, confirmed: bool = False) -> str:
 
 
 @mcp.tool()
-def move_file(source: str, destination: str, confirmed: bool = False) -> str:
+def move_file(source: str, destination: str, confirmed: StrictBool = False) -> str:
     """Move or rename a file/directory inside sandbox/. Never replaces an existing destination; requires confirmed=true."""
     args = _audit_arguments(
         source=source if isinstance(source, str) else repr(source),
