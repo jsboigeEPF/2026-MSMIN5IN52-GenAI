@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from src.clock import Clock
 from src.config import Settings
-from src.llm.client import LLMClient, LLMUsage
+from src.llm.client import LLMClient, LLMError, LLMUsage
 from src.models.state import (
     AgentProcessState,
     ApprovalDecision,
@@ -30,7 +30,7 @@ from src.process.graph import Event, Step
 from src.tools.git_ops import GitError, GitOps
 from src.tools.inspector import CodeInspector
 from src.tools.patch import PatchEngine
-from src.tools.sandbox import SandboxRunner
+from src.tools.sandbox import SandboxRunner, SandboxUnavailableError
 from src.tools.workspace import WorkspaceManager
 
 
@@ -40,14 +40,24 @@ def _no_fault(point: str) -> None:
 
 @dataclass
 class StepContext:
-    llm: LLMClient
-    sandbox: SandboxRunner
+    llm: LLMClient | None  # None for runners that only report and sweep (status, sweep commands)
+    sandbox: SandboxRunner | None
     settings: Settings
     clock: Clock
     fault_hook: Callable[[str], None] = _no_fault  # tests raise here to simulate a crash at a known point
     inspector: CodeInspector = field(default_factory=CodeInspector)
     patch: PatchEngine = field(default_factory=PatchEngine)
     git: GitOps = field(default_factory=GitOps)
+
+    def require_llm(self) -> LLMClient:
+        if self.llm is None:
+            raise LLMError("this runner was built without an LLM client")
+        return self.llm
+
+    def require_sandbox(self) -> SandboxRunner:
+        if self.sandbox is None:
+            raise SandboxUnavailableError("this runner was built without a sandbox")
+        return self.sandbox
 
     def workspace(self, state: AgentProcessState) -> WorkspaceManager:
         return WorkspaceManager(Path(state.target_repo_path), state.base_branch)
@@ -118,7 +128,7 @@ class PlanStep:
             parts.append(f"Reviewer feedback on the previous attempt (address it): {state.human_feedback}")
         if state.execution_plan:
             parts.append("Previous plan:\n" + "\n".join(f"- {s}" for s in state.execution_plan))
-        result = await ctx.llm.structured(
+        result = await ctx.require_llm().structured(
             run_id=state.run_id,
             step=self.step,
             iteration=state.loop_iteration,
@@ -144,7 +154,7 @@ class CodeGenerationStep:
         if state.verification is not None and state.verification.error_summary:
             parts.append(f"Your previous attempt:\n{_fenced(state.generated_code or '')}")
             parts.append(f"It failed verification:\n{state.verification.error_summary}")
-        result = await ctx.llm.structured(
+        result = await ctx.require_llm().structured(
             run_id=state.run_id,
             step=self.step,
             iteration=state.loop_iteration,
@@ -165,13 +175,14 @@ class VerificationStep:
     async def run(self, state: AgentProcessState, ctx: StepContext) -> StepResult:
         worktree = _worktree(state)
         (pytest_ok, pytest_out), (lint_ok, lint_out) = await asyncio.gather(
-            ctx.sandbox.run_pytest(worktree), ctx.sandbox.run_linter(worktree, state.target_file)
+            ctx.require_sandbox().run_pytest(worktree),
+            ctx.require_sandbox().run_linter(worktree, state.target_file),
         )
         usage, summary = LLMUsage(), None
         if not (pytest_ok and lint_ok):
             checks = (("pytest", pytest_ok, pytest_out), ("ruff", lint_ok, lint_out))
             failing = [(name, out) for name, ok, out in checks if not ok]
-            result = await ctx.llm.structured(
+            result = await ctx.require_llm().structured(
                 run_id=state.run_id,
                 step=self.step,
                 iteration=state.loop_iteration,
@@ -254,7 +265,7 @@ class FinalizationStep:
         except GitError as exc:
             state.error_message = str(exc)
             return StepResult(Event.COMMIT_FAILED)
-        passed, output = await ctx.sandbox.run_pytest(repo)
+        passed, output = await ctx.require_sandbox().run_pytest(repo)
         if not passed:
             state.error_message = f"post-commit check failed on {state.base_branch}:\n{output[-2000:]}"
             return StepResult(Event.POST_COMMIT_CHECK_FAILED)

@@ -4,11 +4,14 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
+from semantic_kernel import Kernel
 
 from src.clock import FakeClock
+from src.config import Settings
+from src.llm.client import LLMClient
 from src.llm.fake import FakeLLM
 from src.models.state import CodePatch, PlanOutput, ProcessStatus
-from src.process.engine import DecisionRefusedError, DecisionRequest, StartRequest
+from src.process.engine import DecisionRefusedError, DecisionRequest, ProcessRunner, StartRequest
 from src.storage.sqlite_store import SqliteStore
 from tests.conftest import BUGGY_CALC, FIXED_CALC, T0, RunnerFactory, git
 
@@ -159,3 +162,32 @@ async def test_resume_and_status_are_noops_on_suspended_or_finished_runs(
     await runner.decide(run_id, approve())
     assert (await runner.resume(run_id)).status is ProcessStatus.COMPLETED
     assert sum(fake.calls.values()) == 2
+
+
+async def test_runner_without_llm_or_sandbox_can_still_report_and_sweep(
+    git_repo: Path, make_runner: RunnerFactory, store: SqliteStore, clock: FakeClock
+) -> None:
+    run_id = await make_runner(FakeLLM({"planner": [PLAN], "coder": [GOOD_PATCH]})).start(
+        start_request(git_repo)
+    )
+    settings = Settings(_env_file=None)
+    bare = ProcessRunner(store=store, llm=None, sandbox=None, settings=settings, clock=clock)
+    assert (await bare.status(run_id)).status is ProcessStatus.AWAITING_APPROVAL
+    clock.advance(settings.APPROVAL_TIMEOUT_SEC)
+    assert await bare.sweep_expired() == [run_id]
+
+
+async def test_a_step_without_its_sandbox_fails_cleanly(
+    git_repo: Path, store: SqliteStore, clock: FakeClock
+) -> None:
+    settings = Settings(_env_file=None)
+    fake = FakeLLM({"planner": [PLAN], "coder": [GOOD_PATCH]})
+    runner = ProcessRunner(
+        store=store,
+        llm=LLMClient(Kernel(), fake, store, settings),
+        sandbox=None,
+        settings=settings,
+        clock=clock,
+    )
+    state = await runner.status(await runner.start(start_request(git_repo)))
+    assert (state.status, state.terminal_reason) == (ProcessStatus.FAILED, "sandbox_unavailable")
