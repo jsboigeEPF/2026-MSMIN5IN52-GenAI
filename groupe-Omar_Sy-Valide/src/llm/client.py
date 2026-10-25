@@ -8,8 +8,9 @@ import hashlib
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
-from typing import Any, Generic, Protocol, TypeVar
+from typing import Any, Generic, Protocol, TypeVar, cast
 
+import openai
 from openai.types.chat import ChatCompletion
 from opentelemetry import trace
 from opentelemetry.trace import Tracer
@@ -18,7 +19,7 @@ from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatPromptExecutionSettings
 from semantic_kernel.contents import ChatHistory
-from semantic_kernel.exceptions import KernelInvokeException
+from semantic_kernel.exceptions import KernelInvokeException, ServiceResponseException
 from semantic_kernel.filters import FilterTypes, FunctionInvocationContext
 from semantic_kernel.functions import KernelArguments, KernelFunction, kernel_function
 
@@ -86,6 +87,27 @@ class BudgetExceededError(LLMError):
     pass
 
 
+class LLMProviderError(RuntimeError):
+    """The provider could not serve the call (blocked model, bad key, rate limit, outage).
+
+    Deliberately not an LLMError: the engine treats it as a crash, so the run stays resumable at the
+    current step once the cause (often the model slug in .env) is fixed.
+    """
+
+
+def _provider_reason(exc: BaseException) -> str:
+    """One line from the OpenAI-compatible error SK wraps, e.g. 'HTTP 404: Model blocked by guardrail'."""
+    for candidate in (exc, exc.__cause__):
+        if isinstance(candidate, openai.APIStatusError):
+            body: object = candidate.body
+            detail: object = cast(dict[str, object], body).get("message") if isinstance(body, dict) else None
+            text = str(detail) if detail else candidate.message
+            return f"HTTP {candidate.status_code}: {' '.join(text.split())[:400]}"
+        if isinstance(candidate, openai.APIConnectionError):
+            return f"connection error: {candidate}"
+    return " ".join(str(exc).split())[:400]
+
+
 def prompt_hash(request: ChatRequest) -> str:
     key = [request.service_id, request.system, request.user, request.output_type.__name__]
     return hashlib.sha256(json.dumps(key).encode("utf-8")).hexdigest()
@@ -116,9 +138,16 @@ class OpenRouterBackend:
             service_id=request.service_id,
             response_format=request.output_type,
             temperature=0.0,
-            extra_body={"usage": {"include": True}},  # OpenRouter usage accounting: returns usage.cost
+            extra_body={
+                "usage": {"include": True},  # OpenRouter usage accounting: returns usage.cost
+                "provider": {"require_parameters": True},  # only providers supporting json_schema
+            },
         )
-        message = await service.get_chat_message_content(history, settings)
+        try:
+            message = await service.get_chat_message_content(history, settings)
+        except (ServiceResponseException, openai.APIError) as exc:
+            reason = _provider_reason(exc)
+            raise LLMProviderError(f"{request.service_id} ({service.ai_model_id}): {reason}") from exc
         if message is None:
             raise LLMError(f"{request.service_id}: empty response")
         return ChatResponse(

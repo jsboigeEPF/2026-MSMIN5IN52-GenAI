@@ -14,6 +14,7 @@ from src.llm.client import (
     BudgetExceededError,
     ChatRequest,
     LLMClient,
+    LLMProviderError,
     LLMUsage,
     OpenRouterBackend,
     StructuredOutputError,
@@ -215,8 +216,23 @@ async def test_openrouter_backend_sends_structured_request_and_reads_cost() -> N
     assert body["model"] == "vendor/planner"
     assert body["response_format"]["type"] == "json_schema"
     assert body["usage"] == {"include": True}
+    assert body["provider"] == {"require_parameters": True}
     assert [m["role"] for m in body["messages"]] == ["system", "user"]
     assert PlanOutput.model_validate_json(response.content) == PLAN
     assert response.usage == LLMUsage(
         prompt_tokens=12, completion_tokens=4, cost_usd=0.00042, model_id="vendor/planner"
     )
+
+
+async def test_provider_errors_become_a_short_resumable_error() -> None:
+    def handler(req: httpx2.Request) -> httpx2.Response:
+        message = "0 endpoints available.\nModel blocked by guardrail: 15 endpoints excluded"
+        return httpx2.Response(404, json={"error": {"message": message, "code": 404}})
+
+    http = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
+    backend = OpenRouterBackend(build_kernel(settings(**LIVE), http_client=http))
+    with pytest.raises(LLMProviderError) as err:
+        await backend.complete(request())
+    text = str(err.value)
+    assert "planner" in text and "vendor/planner" in text and "HTTP 404" in text and "guardrail" in text
+    assert "\n" not in text
