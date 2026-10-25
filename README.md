@@ -41,6 +41,33 @@ Pour l'essayer avec MCP Inspector :
 mcp dev server.py
 ```
 
+## Client de démonstration avec Ollama
+
+Le client `demo_client.py` utilise un modèle Ollama local pour choisir les
+outils MCP. Il démarre lui-même `server.py` en transport STDIO et découvre ses
+outils. Ollama doit être lancé sur la machine et le modèle doit être disponible :
+
+```bash
+ollama pull qwen3:4b
+python demo_client.py
+```
+
+Le modèle par défaut est `qwen3:4b`. On peut en choisir un autre avec
+`python demo_client.py --model nom-du-modele`. Le client appelle l'API Ollama
+sur `http://127.0.0.1:11434` ; l'option `--ollama-url` permet de changer cette
+adresse.
+
+Pour `write_file`, `create_directory` et `move_file`, le client affiche les
+arguments proposés, puis attend que l'utilisateur tape exactement `OUI`.
+Toute autre réponse annule l'appel. Le client ajoute lui-même
+`confirmed=true` seulement après cet accord. Le modèle ne peut donc pas
+autoriser sa propre opération. `read_file` et `list_files` ne demandent pas de
+confirmation.
+
+L'accord porte sur les arguments affichés ; relis notamment le chemin, le mode
+d'écriture et le contenu avant de taper `OUI`. Le modèle peut se tromper dans
+le choix d'un outil ou dans ses arguments. Écris `/quit` pour arrêter le client.
+
 Les chemins de test sont par exemple `README.txt` ou `notes/nouvelle-note.txt`.
 `write_file` peut créer les répertoires parents après leur création par
 `create_directory`. Un essai avec `../../etc/passwd` doit être refusé et consigné
