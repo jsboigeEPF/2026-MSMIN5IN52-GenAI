@@ -46,7 +46,9 @@ def test_record_helpers_set_spec_attributes(traced: tuple[Tracer, InMemorySpanEx
             span,
             VerificationResult(pytest_passed=True, pytest_output="", linter_passed=False, linter_output=""),
         )
-        t.record_approval(span, ApprovalDecision(action="approve", actor="alice", decided_at=T0, iteration=0))
+        t.record_approval(
+            span, ApprovalDecision(gate="write", action="approve", actor="alice", decided_at=T0, iteration=0)
+        )
         t.record_llm_call(
             span,
             provider="mock",
@@ -60,6 +62,7 @@ def test_record_helpers_set_spec_attributes(traced: tuple[Tracer, InMemorySpanEx
     assert attrs == {
         "verification.pytest_passed": True,
         "verification.linter_passed": False,
+        "approval.gate": "write",
         "approval.action": "approve",
         "approval.actor": "alice",
         "llm.provider": "mock",
@@ -115,7 +118,7 @@ async def test_evaluation_report(store: SqliteStore, db_path: Path, make_state: 
     await store.append_metric("a", m("plan", 100.0, "vendor/planner", cost=1.0))
     await store.append_metric("b", m("plan", 300.0, "vendor/planner", cost=2.0))
     await store.append_metric("a", m("code", 200.0, "vendor/coder", cost=3.0))
-    await store.append_metric("a", m("approval", 1.0, wait=5000.0))
+    await store.append_metric("a", m("write_approval", 1.0, wait=5000.0))
 
     r = await t.generate_evaluation_report(db_path, usd_eur_rate=0.5)
 
@@ -124,7 +127,7 @@ async def test_evaluation_report(store: SqliteStore, db_path: Path, make_state: 
     assert r.completion_by_scenario["unlabeled"].rate == 0.0
     assert r.compute_by_step["plan"].model_dump() == {"count": 2, "mean_ms": 200.0, "p95_ms": 300.0}
     assert r.compute_by_model["vendor/coder"].mean_ms == 200.0
-    assert "approval" in r.compute_by_step and None not in r.compute_by_model
+    assert "write_approval" in r.compute_by_step and None not in r.compute_by_model
     assert r.human_wait.model_dump() == {"count": 1, "mean_ms": 5000.0, "p95_ms": 5000.0}
     assert r.avg_fix_iterations == pytest.approx(1 / 3)
     assert r.avg_revision_iterations == pytest.approx(2 / 3)

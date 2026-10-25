@@ -23,7 +23,7 @@ from src.llm.fake import FakeLLM, FakeScriptExhaustedError
 from src.models.state import CodePatch, ErrorSummary, PlanOutput
 from src.storage.sqlite_store import SqliteStore
 
-PLAN = PlanOutput(steps=["read calc.py", "fix add"])
+PLAN = PlanOutput(target_file="calc.py", steps=["read calc.py", "fix add"])
 PATCH = CodePatch(new_content="x = 1\n", rationale="r")
 
 
@@ -97,13 +97,13 @@ async def test_structured_call_parses_output_and_reports_usage(
 async def test_same_key_is_replayed_from_cache_without_calling_the_llm(
     store: SqliteStore, exporter: InMemorySpanExporter
 ) -> None:
-    fake = FakeLLM({"planner": [PLAN, PlanOutput(steps=["other"])]})
+    fake = FakeLLM({"planner": [PLAN, PlanOutput(target_file="calc.py", steps=["other"])]})
     client = make_client(fake, store, exporter)
     await call(client)
     replay = await call(make_client(fake, store, exporter))  # fresh client, same store: crash recovery
     assert replay.cached and replay.output == PLAN
     assert fake.calls["planner"] == 1
-    assert (await call(client, iteration=1)).output == PlanOutput(steps=["other"])
+    assert (await call(client, iteration=1)).output == PlanOutput(target_file="calc.py", steps=["other"])
     assert fake.calls["planner"] == 2
 
 

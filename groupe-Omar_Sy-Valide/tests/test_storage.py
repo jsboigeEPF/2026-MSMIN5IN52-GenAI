@@ -50,7 +50,7 @@ async def test_event_journal_is_ordered_and_keeps_payload(store: SqliteStore) ->
 async def test_journal_tables_are_append_only(store: SqliteStore, db_path: Path, table: str) -> None:
     await store.append_event("run-1", T0, "plan", 0, "step_started")
     await store.append_approval(
-        "run-1", ApprovalDecision(action="reject", actor="alice", decided_at=T0, iteration=0)
+        "run-1", ApprovalDecision(gate="plan", action="reject", actor="alice", decided_at=T0, iteration=0)
     )
     async with aiosqlite.connect(db_path) as db:
         with pytest.raises(sqlite3.DatabaseError, match="append-only"):
@@ -60,8 +60,10 @@ async def test_journal_tables_are_append_only(store: SqliteStore, db_path: Path,
 
 
 async def test_approvals_round_trip_in_order(store: SqliteStore) -> None:
-    first = ApprovalDecision(action="revise", actor="alice", comment="add a test", decided_at=T0, iteration=0)
-    second = ApprovalDecision(action="approve", actor="bob", decided_at=T0, iteration=1)
+    first = ApprovalDecision(
+        gate="plan", action="revise", actor="alice", comment="add a test", decided_at=T0, iteration=0
+    )
+    second = ApprovalDecision(gate="write", action="approve", actor="bob", decided_at=T0, iteration=1)
     await store.append_approval("run-1", first)
     await store.append_approval("run-1", second)
     assert await store.list_approvals("run-1") == [first, second]
@@ -108,3 +110,19 @@ async def test_data_survives_reopen(db_path: Path, make_state: StateFactory) -> 
 async def test_store_requires_open(db_path: Path) -> None:
     with pytest.raises(RuntimeError):
         await SqliteStore(db_path).list_runs()
+
+
+async def test_old_databases_get_the_gate_column(db_path: Path) -> None:
+    with sqlite3.connect(db_path) as old:
+        old.execute(
+            "CREATE TABLE approvals (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, "
+            "action TEXT NOT NULL, actor TEXT NOT NULL, comment TEXT, decided_at TEXT NOT NULL, "
+            "iteration INTEGER NOT NULL)"
+        )
+        old.execute(
+            "INSERT INTO approvals (run_id, action, actor, decided_at, iteration) VALUES (?, ?, ?, ?, ?)",
+            ("old-1", "approve", "alice", T0.isoformat(), 0),
+        )
+    async with SqliteStore(db_path) as store:
+        [decision] = await store.list_approvals("old-1")
+    assert (decision.gate, decision.action) == ("write", "approve")

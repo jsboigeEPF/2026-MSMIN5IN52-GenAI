@@ -30,7 +30,10 @@ def make_script(tmp_path: Path) -> Path:
     script = tmp_path / "script.json"
     script.write_text(
         json.dumps(
-            {"planner": [{"steps": ["fix add"]}], "coder": [{"new_content": FIXED_CALC, "rationale": "r"}]}
+            {
+                "planner": [{"target_file": "calc.py", "steps": ["fix add"]}],
+                "coder": [{"new_content": FIXED_CALC, "rationale": "r"}],
+            }
         )
     )
     return script
@@ -59,9 +62,9 @@ def test_graph_draws_every_transition_of_the_table(make_state: StateFactory) -> 
 
 
 def test_graph_highlights_the_current_step_and_visited_steps(make_state: StateFactory) -> None:
-    state = make_state(status=ProcessStatus.AWAITING_APPROVAL, current_step="approval")
-    dot = dashboard.build_dot(state, visited={"plan", "code", "verify"})
-    assert f'"approval" [fillcolor="{dashboard.CURRENT}"' in dot
+    state = make_state(status=ProcessStatus.AWAITING_APPROVAL, current_step="write_approval")
+    dot = dashboard.build_dot(state, visited={"plan", "plan_approval", "code"})
+    assert f'"write_approval" [fillcolor="{dashboard.CURRENT}"' in dot
     assert f'"plan" [fillcolor="{dashboard.VISITED}"' in dot
     assert f'"finalize" [fillcolor="{dashboard.IDLE}"' in dot
 
@@ -76,18 +79,6 @@ def test_graph_highlights_the_terminal_outcome(make_state: StateFactory) -> None
     assert dashboard.CURRENT not in failed
 
 
-def test_approve_is_disabled_unless_verification_passed(make_state: StateFactory) -> None:
-    def verified(pytest_ok: bool, lint_ok: bool) -> VerificationResult:
-        return VerificationResult(
-            pytest_passed=pytest_ok, pytest_output="", linter_passed=lint_ok, linter_output=""
-        )
-
-    assert dashboard.approve_blocker(make_state(verification=verified(True, True))) is None
-    reason = dashboard.approve_blocker(make_state(verification=verified(True, False)))
-    assert reason is not None and "ruff" in reason
-    assert dashboard.approve_blocker(make_state()) is not None
-
-
 async def test_load_run_gathers_journal_approvals_metrics_and_cost(git_repo: Path, tmp_path: Path) -> None:
     db = tmp_path / "d.db"
     async with open_runner(db, drive=True, mock=True, script=make_script(tmp_path)) as runner:
@@ -97,12 +88,13 @@ async def test_load_run_gathers_journal_approvals_metrics_and_cost(git_repo: Pat
             )
         )
         await runner.decide(run_id, DecisionRequest(action="approve", actor="alice"))
+        await runner.decide(run_id, DecisionRequest(action="approve", actor="bob"))
 
     view = await dashboard.load_run(db, "v-1")
     assert view.state.status is ProcessStatus.COMPLETED
-    assert [a.actor for a in view.approvals] == ["alice"]
+    assert [(a.gate, a.actor) for a in view.approvals] == [("plan", "alice"), ("write", "bob")]
     assert view.events[0].event_type == "run_started" and view.events[-1].event_type == "run_finished"
-    assert {m.step_name for m in view.metrics} == {"plan", "code", "verify", "approval", "finalize"}
+    assert {m.step_name for m in view.metrics} == {s.value for s in Step}
     assert view.cost_usd == 0.0  # the fake LLM reports no cost
 
 
@@ -111,7 +103,8 @@ async def test_load_run_gathers_journal_approvals_metrics_and_cost(git_repo: Pat
 
 def test_page_lists_the_run_and_approves_it(git_repo: Path, tmp_path: Path) -> None:
     db = tmp_path / "ui.db"
-    start_mock_run(db, git_repo, make_script(tmp_path), "ui-1")
+    script = make_script(tmp_path)
+    start_mock_run(db, git_repo, script, "ui-1")
 
     at = AppTest.from_file(str(DASHBOARD), default_timeout=120)
     at.run()
@@ -121,7 +114,13 @@ def test_page_lists_the_run_and_approves_it(git_repo: Path, tmp_path: Path) -> N
     assert any("AWAITING_APPROVAL" in m.value for m in at.markdown)
 
     at.checkbox(key="mock_llm").check().run()
+    at.text_input(key="mock_script").set_value(str(script)).run()
     at.text_input(key="actor").set_value("alice").run()
+    assert any("Plan approval" in h.value for h in at.subheader)
+    at.button(key="approve").click().run()
+    assert not at.exception
+    assert any("Write approval" in h.value for h in at.subheader)
+    assert (git_repo / "calc.py").read_text() != FIXED_CALC  # shown as a diff, not written yet
     at.button(key="approve").click().run()
 
     assert not at.exception

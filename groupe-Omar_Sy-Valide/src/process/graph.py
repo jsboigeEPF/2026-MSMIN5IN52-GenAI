@@ -3,9 +3,14 @@
 The runner, the tests and the dashboard all read `TRANSITIONS`. Routing is plain code over the persisted
 state: no LLM ever decides a transition.
 
+Two human gates: the plan (before any code is generated) and the write (before the proposed file is written
+and tested), so no code runs before a human has read it. The approved file is written to the user's working
+tree without a commit.
+
 Counters are incremented before routing (a failed verification bumps `fix_iteration`, a "revise" decision
-bumps `revision_iteration`), so the spec's `fix_iteration < MAX_FIX` (counted before the increment) is
-written here as `fix_iteration <= max_fix`: MAX_FIX is the number of automatic fix loops allowed.
+at either gate bumps `revision_iteration`), so the spec's `fix_iteration < MAX_FIX` (counted before the
+increment) is written here as `fix_iteration <= max_fix`: MAX_FIX is the number of automatic fix loops
+allowed.
 """
 
 from collections.abc import Callable
@@ -13,14 +18,15 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
 
-from src.models.state import AgentProcessState, ProcessStatus
+from src.models.state import AgentProcessState, Gate, ProcessStatus
 
 
 class Step(StrEnum):
     PLAN = "plan"
+    PLAN_APPROVAL = "plan_approval"
     CODE = "code"
+    WRITE_APPROVAL = "write_approval"
     VERIFY = "verify"
-    APPROVAL = "approval"
     FINALIZE = "finalize"
 
 
@@ -33,9 +39,12 @@ class Event(StrEnum):
     REVISION_REQUESTED = "RevisionRequested"
     REJECTED = "Rejected"
     EXPIRED = "Expired"
-    COMMITTED = "Committed"
-    COMMIT_FAILED = "CommitFailed"
-    POST_COMMIT_CHECK_FAILED = "PostCommitCheckFailed"
+    WRITTEN = "Written"
+    WRITE_FAILED = "WriteFailed"
+
+
+# Human gates: the run suspends on these steps until a decision (or the expiry sweep) produces an event.
+GATES: dict[Step, Gate] = {Step.PLAN_APPROVAL: "plan", Step.WRITE_APPROVAL: "write"}
 
 
 @dataclass(frozen=True)
@@ -50,7 +59,7 @@ class Terminal:
 
     status: ProcessStatus
     reason: str | None
-    compensation: Literal["discard_worktree", "git_revert"] | None
+    compensation: Literal["discard_worktree"] | None
 
 
 Guard = Callable[[AgentProcessState, Limits], bool]
@@ -91,10 +100,37 @@ def _discard(status: ProcessStatus, reason: str) -> Terminal:
 
 COMPLETED = Terminal(ProcessStatus.COMPLETED, None, None)
 
+
+def _gate(step: Step, approved: Step, revised: Step) -> tuple[Transition, ...]:
+    """The four exits of a human gate. Both gates share the revision counter."""
+    return (
+        Transition(step, Event.APPROVED, approved, "approved"),
+        Transition(
+            step,
+            Event.REVISION_REQUESTED,
+            revised,
+            "refine (revision_iteration < MAX_REVISIONS)",
+            _revision_left,
+            loop=True,
+        ),
+        Transition(
+            step,
+            Event.REVISION_REQUESTED,
+            _discard(ProcessStatus.REJECTED, "max_iterations"),
+            "revisions exhausted",
+            _revision_exhausted,
+        ),
+        Transition(step, Event.REJECTED, _discard(ProcessStatus.REJECTED, "human_rejected"), "rejected"),
+        Transition(step, Event.EXPIRED, _discard(ProcessStatus.EXPIRED, "approval_expired"), "expired"),
+    )
+
+
 TRANSITIONS: tuple[Transition, ...] = (
-    Transition(Step.PLAN, Event.PLAN_CREATED, Step.CODE, "plan ready"),
-    Transition(Step.CODE, Event.CODE_GENERATED, Step.VERIFY, "patch applied"),
-    Transition(Step.VERIFY, Event.VERIFICATION_PASSED, Step.APPROVAL, "tests and lint pass"),
+    Transition(Step.PLAN, Event.PLAN_CREATED, Step.PLAN_APPROVAL, "plan ready"),
+    *_gate(Step.PLAN_APPROVAL, approved=Step.CODE, revised=Step.PLAN),
+    Transition(Step.CODE, Event.CODE_GENERATED, Step.WRITE_APPROVAL, "diff ready, nothing written"),
+    *_gate(Step.WRITE_APPROVAL, approved=Step.VERIFY, revised=Step.CODE),
+    Transition(Step.VERIFY, Event.VERIFICATION_PASSED, Step.FINALIZE, "tests and lint pass"),
     Transition(
         Step.VERIFY,
         Event.VERIFICATION_FAILED,
@@ -106,46 +142,23 @@ TRANSITIONS: tuple[Transition, ...] = (
     Transition(
         Step.VERIFY,
         Event.VERIFICATION_FAILED,
-        Step.APPROVAL,
-        "fixes exhausted, approve disabled",
+        _discard(ProcessStatus.FAILED, "fixes_exhausted"),
+        "fixes exhausted",
         _fix_exhausted,
     ),
-    Transition(Step.APPROVAL, Event.APPROVED, Step.FINALIZE, "approved"),
+    Transition(Step.FINALIZE, Event.WRITTEN, COMPLETED, "file written, not committed"),
     Transition(
-        Step.APPROVAL,
-        Event.REVISION_REQUESTED,
-        Step.PLAN,
-        "revise (revision_iteration < MAX_REVISIONS)",
-        _revision_left,
-        loop=True,
-    ),
-    Transition(
-        Step.APPROVAL,
-        Event.REVISION_REQUESTED,
-        _discard(ProcessStatus.REJECTED, "max_iterations"),
-        "revisions exhausted",
-        _revision_exhausted,
-    ),
-    Transition(Step.APPROVAL, Event.REJECTED, _discard(ProcessStatus.REJECTED, "human_rejected"), "rejected"),
-    Transition(Step.APPROVAL, Event.EXPIRED, _discard(ProcessStatus.EXPIRED, "approval_expired"), "expired"),
-    Transition(Step.FINALIZE, Event.COMMITTED, COMPLETED, "merged, post-commit check passed"),
-    Transition(
-        Step.FINALIZE, Event.COMMIT_FAILED, _discard(ProcessStatus.FAILED, "commit_failed"), "commit failed"
-    ),
-    Transition(
-        Step.FINALIZE,
-        Event.POST_COMMIT_CHECK_FAILED,
-        Terminal(ProcessStatus.FAILED, "post_commit_check_failed", "git_revert"),
-        "post-commit check failed",
+        Step.FINALIZE, Event.WRITE_FAILED, _discard(ProcessStatus.FAILED, "write_failed"), "write refused"
     ),
 )
 
-# Status shown while a step runs (AWAITING_APPROVAL is set when the approval step suspends).
+# Status shown while a step runs (AWAITING_APPROVAL is set when a gate suspends).
 STEP_STATUS = {
     Step.PLAN: ProcessStatus.PLANNING,
+    Step.PLAN_APPROVAL: ProcessStatus.AWAITING_APPROVAL,
     Step.CODE: ProcessStatus.CODING,
+    Step.WRITE_APPROVAL: ProcessStatus.AWAITING_APPROVAL,
     Step.VERIFY: ProcessStatus.VERIFYING,
-    Step.APPROVAL: ProcessStatus.AWAITING_APPROVAL,
     Step.FINALIZE: ProcessStatus.FINALIZING,
 }
 

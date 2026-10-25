@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from src.tools import sandbox
-from src.tools.git_ops import GitError, GitOps
+from src.tools.git_ops import list_files
 from src.tools.inspector import CodeInspector
 from src.tools.patch import PatchEngine
 from src.tools.sandbox import SandboxRunner, SandboxUnavailableError
@@ -24,6 +24,16 @@ def test_create_worktree_on_run_branch_without_touching_base(git_repo: Path) -> 
     assert git(path, "branch", "--show-current") == branch
     assert git(git_repo, "rev-parse", "main") == base_sha
     assert git(git_repo, "status", "--porcelain") == ""  # .mini-opencode/ is excluded locally
+
+
+def test_create_mirrors_uncommitted_and_untracked_changes(git_repo: Path) -> None:
+    (git_repo / "calc.py").write_text(FIXED_CALC)
+    (git_repo / "notes.py").write_text("x = 1\n")
+    (git_repo / "tests" / "test_calc.py").unlink()
+    path, _ = WorkspaceManager(git_repo, "main").create("run-1")
+    assert (path / "calc.py").read_text() == FIXED_CALC
+    assert (path / "notes.py").read_text() == "x = 1\n"
+    assert not (path / "tests" / "test_calc.py").exists()
 
 
 def test_create_is_idempotent(git_repo: Path) -> None:
@@ -111,33 +121,37 @@ def test_inspect_ast_reports_syntax_errors(tmp_path: Path) -> None:
 # --- PatchEngine --------------------------------------------------------------------------------------
 
 
-def test_apply_writes_file_and_returns_diff_against_base(git_repo: Path) -> None:
-    path, _ = WorkspaceManager(git_repo, "main").create("run-1")
-    diff = PatchEngine().apply(path, "calc.py", FIXED_CALC)
-    assert (path / "calc.py").read_text() == FIXED_CALC
+def test_diff_is_pure_and_shows_the_change() -> None:
+    diff = PatchEngine.diff("calc.py", BUGGY_CALC, FIXED_CALC)
     assert "--- a/calc.py" in diff and "+++ b/calc.py" in diff
     assert "-    return a - b" in diff and "+    return a + b" in diff
+    assert PatchEngine.diff("calc.py", BUGGY_CALC, FIXED_CALC) == diff
+
+
+def test_diff_of_a_new_file() -> None:
+    assert "+x = 1" in PatchEngine.diff("pkg/new.py", "", "x = 1\n")
+
+
+def test_apply_writes_only_under_its_root(git_repo: Path) -> None:
+    path, _ = WorkspaceManager(git_repo, "main").create("run-1")
+    assert PatchEngine().apply(path, "calc.py", FIXED_CALC) == (path / "calc.py").resolve()
+    assert (path / "calc.py").read_text() == FIXED_CALC
     assert (git_repo / "calc.py").read_text() == BUGGY_CALC  # user's tree untouched
 
 
-def test_reapplying_the_same_patch_gives_the_same_diff(git_repo: Path) -> None:
-    path, _ = WorkspaceManager(git_repo, "main").create("run-1")
-    engine = PatchEngine()
-    assert engine.apply(path, "calc.py", FIXED_CALC) == engine.apply(path, "calc.py", FIXED_CALC)
+def test_apply_can_create_a_new_file(tmp_path: Path) -> None:
+    PatchEngine().apply(tmp_path, "pkg/new.py", "x = 1\n")
+    assert (tmp_path / "pkg" / "new.py").read_text() == "x = 1\n"
 
 
-def test_apply_can_create_a_new_file(git_repo: Path) -> None:
-    path, _ = WorkspaceManager(git_repo, "main").create("run-1")
-    diff = PatchEngine().apply(path, "pkg/new.py", "x = 1\n")
-    assert (path / "pkg" / "new.py").read_text() == "x = 1\n"
-    assert "+x = 1" in diff
-
-
-@pytest.mark.parametrize("file", ["../escape.py", "/abs.py", "C:/abs.py"])
-def test_apply_refuses_paths_outside_the_worktree(git_repo: Path, file: str) -> None:
-    path, _ = WorkspaceManager(git_repo, "main").create("run-1")
+@pytest.mark.parametrize(
+    "file",
+    ["../escape.py", "/abs.py", "C:/abs.py", "", "  ", ".", ".git/config", "a/.mini-opencode/x.py", "pkg"],
+)
+def test_apply_refuses_unsafe_paths(tmp_path: Path, file: str) -> None:
+    (tmp_path / "pkg").mkdir()
     with pytest.raises(ValueError):
-        PatchEngine().apply(path, file, "x = 1\n")
+        PatchEngine().apply(tmp_path, file, "x = 1\n")
 
 
 # --- SandboxRunner ------------------------------------------------------------------------------------
@@ -185,29 +199,16 @@ async def test_subprocess_environment_has_no_secrets(git_repo: Path, monkeypatch
     assert passed, output
 
 
-def test_auto_mode_uses_docker_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sandbox, "docker_available", lambda image: True)
-    assert SandboxRunner(mode="auto", timeout_sec=10, image="img").mode == "docker"
-
-
-def test_auto_mode_fails_closed_without_docker(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_docker_mode_fails_closed_without_docker(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sandbox, "docker_available", lambda image: False)
-    with pytest.raises(SandboxUnavailableError, match="SANDBOX_MODE=subprocess"):
-        SandboxRunner(mode="auto", timeout_sec=10, image="img")
+    with pytest.raises(SandboxUnavailableError, match="SANDBOX_MODE=docker"):
+        SandboxRunner(mode="docker", timeout_sec=10, image="img")
 
 
-async def test_explicit_subprocess_mode_warns_on_every_run(
-    git_repo: Path, caplog: pytest.LogCaptureFixture
+def test_docker_command_isolates_network_and_mounts_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    runner = subprocess_runner()
-    with caplog.at_level("WARNING", logger="src.tools.sandbox"):
-        await runner.run_pytest(git_repo)
-        await runner.run_linter(git_repo, "calc.py")
-    host_warnings = [r for r in caplog.records if "on the host" in r.getMessage()]
-    assert len(host_warnings) == 3  # once at construction, once per run
-
-
-def test_docker_command_isolates_network_and_mounts_worktree(tmp_path: Path) -> None:
+    monkeypatch.setattr(sandbox, "docker_available", lambda image: True)
     cmd = SandboxRunner(mode="docker", timeout_sec=10, image="img")._docker_cmd(tmp_path, ["pytest"], "c1")
     assert cmd[:3] == ["docker", "run", "--rm"]
     assert ["--network", "none"] == cmd[cmd.index("--network") : cmd.index("--network") + 2]
@@ -270,55 +271,12 @@ async def test_docker_linter_ignores_permission_bits_of_the_mount(git_repo: Path
     assert passed, output
 
 
-# --- GitOps -------------------------------------------------------------------------------------------
+# --- git helpers ----------------------------------------------------------------------------------------
 
 
-def patched_worktree(git_repo: Path) -> Path:
-    path, _ = WorkspaceManager(git_repo, "main").create("run-1")
-    PatchEngine().apply(path, "calc.py", FIXED_CALC)
-    return path
-
-
-def test_commit_on_run_branch_is_idempotent(git_repo: Path) -> None:
-    base_sha = git(git_repo, "rev-parse", "main")
-    path = patched_worktree(git_repo)
-    ops = GitOps()
-    sha = ops.commit(path, "calc.py", "fix: add")
-    assert git(git_repo, "rev-parse", "mini-opencode/run-1") == sha
-    assert ops.commit(path, "calc.py", "fix: add") == sha
-    assert git(git_repo, "rev-parse", "main") == base_sha
-
-
-def test_merge_ff_moves_base_branch(git_repo: Path) -> None:
-    ops = GitOps()
-    sha = ops.commit(patched_worktree(git_repo), "calc.py", "fix: add")
-    assert ops.merge_ff(git_repo, "main", "mini-opencode/run-1") == sha
-    assert (git_repo / "calc.py").read_text() == FIXED_CALC
-
-
-def test_merge_ff_refuses_diverged_base(git_repo: Path) -> None:
-    ops = GitOps()
-    ops.commit(patched_worktree(git_repo), "calc.py", "fix: add")
-    (git_repo / "README.md").write_text("diverge\n")
-    git(git_repo, "add", "README.md")
-    git(git_repo, "commit", "-q", "-m", "diverge")
-    with pytest.raises(GitError):
-        ops.merge_ff(git_repo, "main", "mini-opencode/run-1")
-
-
-def test_merge_ff_requires_base_checked_out(git_repo: Path) -> None:
-    ops = GitOps()
-    ops.commit(patched_worktree(git_repo), "calc.py", "fix: add")
-    git(git_repo, "switch", "-q", "-c", "elsewhere")
-    with pytest.raises(GitError, match="checked out"):
-        ops.merge_ff(git_repo, "main", "mini-opencode/run-1")
-
-
-def test_revert_restores_content_and_is_idempotent(git_repo: Path) -> None:
-    ops = GitOps()
-    sha = ops.commit(patched_worktree(git_repo), "calc.py", "fix: add")
-    ops.merge_ff(git_repo, "main", "mini-opencode/run-1")
-    revert_sha = ops.revert(git_repo, sha)
-    assert (git_repo / "calc.py").read_text() == BUGGY_CALC
-    assert ops.revert(git_repo, sha) == revert_sha
-    assert git(git_repo, "rev-parse", "main") == revert_sha
+def test_list_files_includes_untracked_but_not_ignored_or_run_files(git_repo: Path) -> None:
+    (git_repo / ".gitignore").write_text("*.log\n")
+    (git_repo / "debug.log").write_text("x")
+    (git_repo / "new_module.py").write_text("x = 1\n")
+    WorkspaceManager(git_repo, "main").create("run-1")
+    assert list_files(git_repo) == [".gitignore", "calc.py", "new_module.py", "tests/test_calc.py"]

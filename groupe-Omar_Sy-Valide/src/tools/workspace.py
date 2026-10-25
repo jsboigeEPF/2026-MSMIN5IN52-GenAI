@@ -1,10 +1,15 @@
-"""One git worktree per run (SPEC §4.1). The user's working tree and base branch are never modified here."""
+"""One git worktree per run (SPEC §4.1). The user's working tree and branch are never modified here.
+
+The worktree starts from the user's branch and receives their uncommitted changes (tracked edits and
+untracked files), so the tests run on the same tree the approved file will be written into.
+"""
 
 import re
 import shutil
+import subprocess
 from pathlib import Path
 
-from src.tools.git_ops import run_git
+from src.tools.git_ops import GitError, run_git
 
 RUNS_DIR = Path(".mini-opencode") / "runs"
 _SAFE_RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
@@ -34,7 +39,26 @@ class WorkspaceManager:
             run_git(self.repo, "worktree", "add", "-q", str(path), branch)
         else:
             run_git(self.repo, "worktree", "add", "-q", "-b", branch, str(path), self.base_branch)
+        self._mirror_uncommitted_changes(path)
         return path, branch
+
+    def _mirror_uncommitted_changes(self, path: Path) -> None:
+        diff = subprocess.run(
+            ["git", "diff", "HEAD", "--binary"], cwd=self.repo, capture_output=True, check=False
+        )
+        if diff.returncode != 0:
+            raise GitError(f"git diff HEAD failed: {diff.stderr.decode(errors='replace').strip()}")
+        if diff.stdout:
+            applied = subprocess.run(
+                ["git", "apply", "--whitespace=nowarn"], cwd=path, input=diff.stdout, capture_output=True
+            )
+            if applied.returncode != 0:
+                raise GitError(f"git apply failed: {applied.stderr.decode(errors='replace').strip()}")
+        untracked = run_git(self.repo, "ls-files", "--others", "--exclude-standard")
+        for name in untracked.splitlines():
+            if name and not name.startswith(".mini-opencode/"):
+                (path / name).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(self.repo / name, path / name)
 
     def discard(self, run_id: str) -> None:
         path, branch = self.worktree_path(run_id), self.run_branch(run_id)

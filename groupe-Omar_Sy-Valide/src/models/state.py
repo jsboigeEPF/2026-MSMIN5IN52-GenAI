@@ -1,8 +1,9 @@
 """Domain models (SPEC §3).
 
 Additions to the spec: `scenario` label, `TERMINAL_STATUSES`, `ErrorSummary`, and in the state
-`loop_iteration` (one per pass through the graph, keys checkpoints and the LLM cache) and `awaiting_since`
-(start of the human wait).
+`loop_iteration` (one per pass through the graph, keys checkpoints and the LLM cache), `awaiting_since`
+(start of the human wait), `file_locked` (target file given by the user, not chosen by the planner) and
+`undone` (the written file was restored).
 """
 
 from datetime import datetime
@@ -59,6 +60,7 @@ class CodePatch(BaseModel):  # structured LLM output of Step 2
 
 
 class PlanOutput(BaseModel):  # structured LLM output of Step 1
+    target_file: str  # repository-relative path of the one file to change, chosen by the planner
     steps: list[str]
 
 
@@ -66,7 +68,11 @@ class ErrorSummary(BaseModel):  # structured LLM output of Step 3 (summarizer)
     summary: str
 
 
+Gate = Literal["plan", "write"]
+
+
 class ApprovalDecision(BaseModel):  # append-only audit record
+    gate: Gate
     action: Literal["approve", "revise", "reject"]
     actor: str
     comment: str | None = None
@@ -75,7 +81,7 @@ class ApprovalDecision(BaseModel):  # append-only audit record
 
 
 class CompensationRecord(BaseModel):
-    action: Literal["discard_worktree", "git_revert"]
+    action: Literal["discard_worktree"]
     done: bool
     detail: str | None = None
     at: datetime
@@ -93,9 +99,11 @@ class AgentProcessState(BaseModel):
     base_branch: str
     worktree_path: str | None = None
     run_branch: str | None = None
-    target_file: str
+    target_file: str | None = None  # chosen by the planner unless given by the user
+    file_locked: bool = False  # True when the user gave the target file
     user_prompt: str
     original_file_content: str | None = None
+    target_existed: bool = True  # False when the run creates the file (undo then deletes it)
     execution_plan: list[str] | None = None
     generated_code: str | None = None
     unified_diff: str | None = None
@@ -106,7 +114,7 @@ class AgentProcessState(BaseModel):
     human_feedback: str | None = None
     awaiting_since: datetime | None = None
     approval_deadline: datetime | None = None
-    git_commit_hash: str | None = None
+    undone: bool = False
     compensation: CompensationRecord | None = None
     metrics: list[StepMetrics] = Field(default_factory=list[StepMetrics])
     error_message: str | None = None

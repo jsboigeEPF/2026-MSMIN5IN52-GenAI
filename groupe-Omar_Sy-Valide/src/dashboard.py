@@ -3,7 +3,8 @@
     streamlit run src/dashboard.py
 
 Runs list, process graph drawn from `graph.TRANSITIONS` with the current step highlighted, diff, verification
-output, event journal, approval history, approve / revise / reject with an actor name, cost and timing.
+output, event journal, approval history, approve / revise / reject on the pending gate (plan or write) with
+an actor name, cost and timing.
 Every refresh sweeps expired approvals first. Data access and the graph are plain functions (tested without
 Streamlit); `main()` only lays them out.
 """
@@ -15,7 +16,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from src.config import Settings
+from src.config import DEFAULT_DB, Settings
 from src.llm.client import LLMProviderError
 from src.llm.fake import FakeScriptExhaustedError
 from src.models.state import (
@@ -27,12 +28,12 @@ from src.models.state import (
 )
 from src.process.engine import DecisionRefusedError, DecisionRequest
 from src.process.graph import TRANSITIONS, Step, Terminal
+from src.process.steps import HumanApprovalStep
 from src.runtime import open_runner
 from src.storage.sqlite_store import EventRecord
 from src.tools.git_ops import GitError
 from src.tools.sandbox import SandboxUnavailableError
 
-DEFAULT_DB = "mini-opencode.db"
 IDLE, VISITED, CURRENT = "#f4f4f5", "#dbeafe", "#fde68a"
 SUCCESS, FAILURE = "#bbf7d0", "#fecaca"
 
@@ -75,13 +76,10 @@ async def submit_decision(
         return await runner.decide(run_id, request)
 
 
-def approve_blocker(state: AgentProcessState) -> str | None:
-    """Why approve is disabled, mirroring the engine's rule (None when approve is allowed)."""
-    v = state.verification
-    if v is None:
-        return "no verification result yet"
-    failed = [name for name, ok in (("pytest", v.pytest_passed), ("ruff", v.linter_passed)) if not ok]
-    return f"verification did not pass ({', '.join(failed)}): revise or reject" if failed else None
+GATE_TITLES = {
+    "plan": "Plan approval: approve to generate the code",
+    "write": "Write approval: approve to write the file, then run the tests",
+}
 
 
 _MARKDOWN_SPECIAL = re.compile(r"([\\`*_{}\[\]()#+\-.!|<>~$])")
@@ -150,8 +148,8 @@ _DECISION_ERRORS = (
 
 
 def _sidebar() -> tuple[Path, bool, Path | None]:
-    st.sidebar.title("Mini-OpenCode")
-    db = Path(st.sidebar.text_input("Database", value=DEFAULT_DB, key="db_path"))
+    st.sidebar.title("Omar Sy Valide")
+    db = Path(st.sidebar.text_input("Database", value=str(DEFAULT_DB), key="db_path"))
     mock = st.sidebar.checkbox("Mock LLM (no network)", key="mock_llm")
     script_text = st.sidebar.text_input("Mock script (JSON)", value="", key="mock_script", disabled=not mock)
     st.sidebar.button("Refresh (also expires overdue approvals)", key="refresh")
@@ -160,17 +158,17 @@ def _sidebar() -> tuple[Path, bool, Path | None]:
 
 def _decision_panel(view: RunView, db: Path, mock: bool, script: Path | None) -> None:
     state = view.state
-    st.subheader("Human approval")
+    gate = HumanApprovalStep.gate(state)
+    if gate is None:
+        return
+    st.subheader(GATE_TITLES[gate])
     if state.approval_deadline is not None:
         st.caption(f"Deadline: {state.approval_deadline.isoformat(timespec='seconds')}")
     actor = st.text_input("Your name (stored in the audit log)", key="actor")
     comment = st.text_area("Comment (required for revise)", key="comment")
-    blocker = approve_blocker(state)
-    if blocker:
-        st.warning(f"Approve is disabled: {blocker}")
     approve_col, revise_col, reject_col = st.columns(3)
     clicked = None
-    if approve_col.button("Approve", key="approve", type="primary", disabled=blocker is not None):
+    if approve_col.button("Approve", key="approve", type="primary"):
         clicked = "approve"
     if revise_col.button("Revise", key="revise"):
         clicked = "revise"
@@ -195,7 +193,7 @@ def _run_details(view: RunView, db: Path, mock: bool, script: Path | None) -> No
     state, settings = view.state, Settings()
     reason = f" ({md_escape(state.terminal_reason)})" if state.terminal_reason else ""
     st.markdown(f"### Run {md_escape(state.run_id)} — **{state.status.value}**{reason}")
-    target = f"{state.target_file} in {state.target_repo_path} (base {state.base_branch})"
+    target = f"{state.target_file or '(file not chosen yet)'} in {state.target_repo_path}"
     st.caption(md_escape(f"{target} — {state.user_prompt}"))
 
     compute = sum(m.compute_ms for m in view.metrics)
@@ -275,7 +273,7 @@ def _run_details(view: RunView, db: Path, mock: bool, script: Path | None) -> No
 
 
 def main() -> None:
-    st.set_page_config(page_title="Mini-OpenCode", layout="wide")
+    st.set_page_config(page_title="Omar Sy Valide", layout="wide")
     db, mock, script = _sidebar()
     if flash := st.session_state.pop("flash", None):
         st.success(flash)

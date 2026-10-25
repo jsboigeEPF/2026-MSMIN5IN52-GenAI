@@ -31,6 +31,7 @@ CREATE INDEX IF NOT EXISTS events_by_run ON events (run_id, id);
 CREATE TABLE IF NOT EXISTS approvals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id TEXT NOT NULL,
+    gate TEXT NOT NULL,
     action TEXT NOT NULL,
     actor TEXT NOT NULL,
     comment TEXT,
@@ -99,7 +100,14 @@ class SqliteStore:
         self._db = await aiosqlite.connect(self.db_path)
         self._db.row_factory = aiosqlite.Row
         await self._db.executescript(SCHEMA + APPEND_ONLY_TRIGGERS)
+        await self._migrate()
         await self._db.commit()
+
+    async def _migrate(self) -> None:
+        """Databases created before the plan gate have no `approvals.gate`; their decisions were writes."""
+        columns = {row["name"] for row in await self._fetch("PRAGMA table_info(approvals)")}
+        if "gate" not in columns:
+            await self.db.execute("ALTER TABLE approvals ADD COLUMN gate TEXT NOT NULL DEFAULT 'write'")
 
     async def close(self) -> None:
         if self._db is not None:
@@ -188,10 +196,11 @@ class SqliteStore:
 
     async def append_approval(self, run_id: str, decision: ApprovalDecision) -> None:
         await self._write(
-            "INSERT INTO approvals (run_id, action, actor, comment, decided_at, iteration) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO approvals (run_id, gate, action, actor, comment, decided_at, iteration) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 run_id,
+                decision.gate,
                 decision.action,
                 decision.actor,
                 decision.comment,
@@ -204,6 +213,7 @@ class SqliteStore:
         rows = await self._fetch("SELECT * FROM approvals WHERE run_id = ? ORDER BY id", (run_id,))
         return [
             ApprovalDecision(
+                gate=r["gate"],
                 action=r["action"],
                 actor=r["actor"],
                 comment=r["comment"],

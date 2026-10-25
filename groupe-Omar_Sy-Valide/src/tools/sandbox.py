@@ -1,11 +1,12 @@
-"""Run pytest and ruff on a worktree, isolated from the host (SPEC §4.4).
+"""Run pytest and ruff on a run worktree (SPEC §4.4).
 
-Fails closed: `auto` never silently downgrades to running generated code on the host. Host execution
-needs an explicit SANDBOX_MODE=subprocess and is logged as a warning on every run.
+The code under test has been read and approved by a human at the write gate before it ever runs, so the
+default is a local subprocess: no API keys or tokens in its environment (allowlist), a time limit, and the
+user's working tree untouched (it runs in the worktree). `docker` adds network and filesystem isolation for
+those who want it; it fails closed if Docker or the image is missing.
 """
 
 import asyncio
-import logging
 import os
 import shutil
 import subprocess
@@ -14,10 +15,7 @@ import uuid
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
-SandboxMode = Literal["docker", "subprocess"]
-
-logger = logging.getLogger(__name__)
-_HOST_WARNING = "SANDBOX_MODE=subprocess: generated code runs on the host without isolation"
+SandboxMode = Literal["subprocess", "docker"]
 
 
 class SandboxUnavailableError(RuntimeError):
@@ -63,32 +61,25 @@ def _sandbox_env() -> dict[str, str]:
 
 
 class SandboxRunner:
-    def __init__(self, mode: Literal["auto", "docker", "subprocess"], timeout_sec: int, image: str) -> None:
-        if mode == "auto":
-            if not docker_available(image):
-                raise SandboxUnavailableError(
-                    f"SANDBOX_MODE=auto needs Docker and the image '{image}' "
-                    "(docker build -t mini-opencode-sandbox sandbox/). To run generated code on the host "
-                    "instead, set SANDBOX_MODE=subprocess explicitly."
-                )
-            mode = "docker"
+    def __init__(self, mode: SandboxMode, timeout_sec: int, image: str) -> None:
+        if mode == "docker" and not docker_available(image):
+            raise SandboxUnavailableError(
+                f"SANDBOX_MODE=docker needs Docker running and the image '{image}' "
+                "(docker build -t mini-opencode-sandbox sandbox/); leave SANDBOX_MODE empty for local runs."
+            )
         self.mode: SandboxMode = mode
-        if self.mode == "subprocess":
-            logger.warning(_HOST_WARNING)
         self.timeout_sec = timeout_sec
         self.image = image
 
     async def run_pytest(self, worktree_path: Path) -> tuple[bool, str]:
         if self.mode == "docker":
             return await self._run_docker(worktree_path, ["python", *_PYTEST_ARGS])
-        logger.warning(_HOST_WARNING)
         return await self._run([sys.executable, *_PYTEST_ARGS], cwd=worktree_path, env=_sandbox_env())
 
     async def run_linter(self, worktree_path: Path, file: str) -> tuple[bool, str]:
         target = str(PurePosixPath(Path(file).as_posix()))
         if self.mode == "docker":
             return await self._run_docker(worktree_path, ["ruff", *_RUFF_ARGS, target])
-        logger.warning(_HOST_WARNING)
         return await self._run(
             [sys.executable, "-m", "ruff", *_RUFF_ARGS, target],
             cwd=worktree_path,
