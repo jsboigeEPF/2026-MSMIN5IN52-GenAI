@@ -29,6 +29,7 @@ models/
 .mini-opencode/
 *.db
 .ruff_cache/
+*.egg-info/
 
 # Re-include paths ignored by the repo-root .gitignore
 !.claude/

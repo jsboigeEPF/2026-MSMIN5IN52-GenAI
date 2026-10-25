@@ -9,10 +9,12 @@ Deterministic, stateful, observable coding agent with human-in-the-loop approval
 - Edit only `groupe-Omar_Sy-Valide/` (see `../AGENTS.md`). Never touch `../docs/`, `../.github/`, other groups.
 - Claude Code is launched from the repo root; `../.claude/settings.json` is local (gitignored by the course
   repo) and mirrors the committed copy `.claude/settings.json` here. Keep both identical.
-- All commands below run from `groupe-Omar_Sy-Valide/`.
+- All commands below run from `groupe-Omar_Sy-Valide/` with `.venv` active (Windows: `.venv\Scripts\activate`).
+- Time comes from `src/clock.py` (`SystemClock` / `FakeClock`); settings from `src/config.py` (`Settings`).
 
 ## Commands
 ```sh
+python -m venv .venv && .venv/Scripts/python -m pip install -e ".[dev]"   # once
 pytest                         # all tests, mock LLM only
 ruff check src tests
 pyright src

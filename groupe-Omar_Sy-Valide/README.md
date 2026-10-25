@@ -38,10 +38,11 @@ Prérequis : Python 3.11+, git, Docker (optionnel, sandbox), Node.js (pour pyrig
 cd groupe-Omar_Sy-Valide
 python -m venv .venv
 # Windows : .venv\Scripts\activate    —    Linux/macOS : source .venv/bin/activate
+pip install -e ".[dev]"            # versions figées dans pyproject.toml
 cp .env.example .env               # puis renseigner les valeurs localement ; ne jamais commiter .env
 ```
 
-Le fichier de dépendances (`pyproject.toml`) arrive en phase 1.
+Les valeurs vides de `.env` reprennent les valeurs par défaut de `src/config.py`.
 
 ### Hook de commit (chaque membre, une fois)
 
@@ -85,7 +86,13 @@ python -m src.cli --help   # disponible à partir de la phase 4
 pytest
 ```
 
-Les tests (outils, table de transitions, 9 scénarios en mode mock) arrivent à partir de la phase 1.
+Phase 1 : 41 tests unitaires (configuration, horloge injectée, modèles, stockage SQLite avec journaux
+append-only, traces OpenTelemetry, rapport d'évaluation). Les scénarios de bout en bout arrivent en phase 4.
+
+```bash
+ruff check src tests
+pyright src      # mode strict
+```
 
 ## Résultats et évaluation
 
