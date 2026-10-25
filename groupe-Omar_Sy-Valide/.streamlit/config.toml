@@ -1,0 +1,7 @@
+# Read by `streamlit run` when launched from this folder.
+# The dashboard has no login and can approve merges: it must only be reachable from this machine.
+[server]
+address = "127.0.0.1"
+
+[browser]
+gatherUsageStats = false

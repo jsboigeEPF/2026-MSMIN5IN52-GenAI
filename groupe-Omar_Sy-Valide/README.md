@@ -169,6 +169,10 @@ une mesure statistique : les chiffres de taux de complétion sont à compléter 
 - **Modèles limités par la clé du cours** (8 modèles autorisés) ; un modèle refusé laisse le run reprenable.
 - **Sandbox** : Docker requis par défaut ; `SANDBOX_MODE=subprocess` exécute le code généré sur l'hôte et
   n'est qu'un choix explicite (avertissement à chaque exécution).
+- **Tableau de bord sans authentification** : outil local mono-utilisateur. `.streamlit/config.toml` le limite
+  à `127.0.0.1` ; le nom de l'évaluateur est déclaratif. Il ne doit pas être exposé sur un réseau sans un
+  proxy authentifiant devant lui. Les textes issus du LLM et des outils sont affichés échappés (pas de
+  Markdown actif, donc pas d'image ni de lien injectés).
 - **Plan B de démonstration** : mode `--mock-llm` (aucun appel réseau, comportement déterministe).
 
 ## Répartition du travail
