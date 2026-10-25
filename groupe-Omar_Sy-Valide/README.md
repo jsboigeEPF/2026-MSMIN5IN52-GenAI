@@ -165,7 +165,7 @@ ruff check src tests
 pyright src      # mode strict
 ```
 
-189 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
+190 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
 
 - **Scénarios de bout en bout** (`tests/test_scenarios.py`, SPEC §8) : nominal (fichier choisi par l'IA),
   rejet à chaque porte, expiration, reprise en attente de validation, crash au milieu d'une étape (réponse

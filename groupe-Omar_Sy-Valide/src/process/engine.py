@@ -45,7 +45,6 @@ from src.process.graph import (
     GATES,
     STEP_STATUS,
     Event,
-    Limits,
     Step,
     Terminal,
     Transition,
@@ -113,7 +112,7 @@ class ProcessRunner:
         self.on_event = on_event
         self.clock = clock
         self.tracer = tracer or trace.get_tracer(__name__)
-        self.limits = Limits(max_fix=settings.MAX_FIX, max_revisions=settings.MAX_REVISIONS)
+        self.limits = settings.limits()
         self.ctx = StepContext(llm=llm, sandbox=sandbox, settings=settings, clock=clock)
         if fault_hook is not None:
             self.ctx.fault_hook = fault_hook

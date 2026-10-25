@@ -13,7 +13,7 @@ from src.models.state import ProcessStatus, VerificationResult
 from src.process.engine import DecisionRequest, StartRequest
 from src.process.graph import TRANSITIONS, Step, Terminal
 from src.runtime import open_runner
-from src.storage.sqlite_store import SqliteStore
+from src.storage.sqlite_store import EventRecord, SqliteStore
 from tests.conftest import FIXED_CALC, T0, StateFactory
 
 DASHBOARD = Path(dashboard.__file__)
@@ -226,3 +226,19 @@ def test_dashboard_only_listens_on_localhost() -> None:
     )
     assert config["server"]["address"] == "127.0.0.1"
     assert config["browser"]["gatherUsageStats"] is False
+
+
+def test_timeline_and_labels_tell_the_truth_about_the_file(make_state: StateFactory) -> None:
+    finalize = EventRecord(
+        id=1, run_id="r", ts=T0, step="finalize", iteration=0, event_type="step_completed",
+        payload={"event": "WriteFailed", "next": "end"},
+    )  # fmt: skip
+    failed = make_state(status=ProcessStatus.FAILED, terminal_reason="write_failed", error_message="edited")
+    view = dashboard.RunView(failed, [finalize], [], [], 0.0)
+    assert [i.title for i in dashboard.timeline(view)] == ["Écriture refusée"]
+
+    undone = make_state(status=ProcessStatus.COMPLETED, undone=True)
+    anyway = make_state(status=ProcessStatus.COMPLETED, terminal_reason="written_despite_failing_tests")
+    rows = [dashboard.RunRow(undone, T0), dashboard.RunRow(anyway, T0)]
+    assert dashboard.run_label(rows[0]).endswith("Annulé (fichier restauré)")
+    assert dashboard.filter_runs(rows, dashboard.ALL, "Terminé (tests en échec)") == [rows[1]]

@@ -132,9 +132,7 @@ def run_label(row: RunRow) -> str:
 
 def filter_runs(rows: list[RunRow], project: str, status: str) -> list[RunRow]:
     return [
-        r
-        for r in rows
-        if project in (ALL, project_name(r.state)) and status in (ALL, STATUS_LABELS[r.state.status])
+        r for r in rows if project in (ALL, project_name(r.state)) and status in (ALL, status_label(r.state))
     ]
 
 
@@ -142,15 +140,8 @@ def timeline(view: RunView) -> list[TimelineItem]:
     """What happened, in order, in words: built from the journal, the decisions and the final state."""
     state = view.state
     items: list[TimelineItem] = []
-    last_plan = max(
-        (e.id for e in view.events if (e.step, e.event_type) == ("plan", "step_completed")), default=None
-    )
-    last_code = max(
-        (e.id for e in view.events if (e.step, e.event_type) == ("code", "step_completed")), default=None
-    )
-    last_tests = max(
-        (e.id for e in view.events if (e.step, e.event_type) == ("verify", "step_completed")), default=None
-    )
+    last = {e.step: e.id for e in view.events if e.event_type == "step_completed"}  # later ids win
+    last_plan, last_code, last_tests = last.get(Step.PLAN), last.get(Step.CODE), last.get(Step.VERIFY)
     for e in view.events:
         if e.event_type == "run_started":
             items.append(TimelineItem(e.ts, "📝", "Tâche reçue", state.user_prompt))
@@ -175,7 +166,10 @@ def timeline(view: RunView) -> list[TimelineItem]:
                 TimelineItem(e.ts, "⏸️", f"En attente de ta décision sur {GATE_LABELS.get(gate, gate)}")
             )
         elif e.event_type == "step_completed" and e.step == Step.FINALIZE:
-            items.append(TimelineItem(e.ts, "💾", f"Fichier écrit : {state.target_file}"))
+            if (e.payload or {}).get("event") == "Written":
+                items.append(TimelineItem(e.ts, "💾", f"Fichier écrit : {state.target_file}"))
+            else:
+                items.append(TimelineItem(e.ts, "🛑", "Écriture refusée", state.error_message))
         elif e.event_type == "step_failed":
             reason = str((e.payload or {}).get("reason", ""))
             items.append(TimelineItem(e.ts, "⚠️", f"Échec : {TERMINAL_REASONS.get(reason, reason)}"))
@@ -246,10 +240,6 @@ def _seconds(ms: float) -> str:
     return f"{ms / 1000:.1f} s"
 
 
-def _limits(settings: Settings) -> Limits:
-    return Limits(max_fix=settings.MAX_FIX, max_revisions=settings.MAX_REVISIONS)
-
-
 # --- page --------------------------------------------------------------------------------------------------
 
 _DECISION_ERRORS = (
@@ -276,7 +266,7 @@ def _sidebar_settings() -> tuple[Path, bool, Path | None]:
 def _pick_run(rows: list[RunRow]) -> str | None:
     projects = sorted({project_name(r.state) for r in rows})
     project = st.sidebar.selectbox("Projet", [ALL, *projects], key="project")
-    statuses = sorted({STATUS_LABELS[r.state.status] for r in rows})
+    statuses = sorted({status_label(r.state) for r in rows})
     status = st.sidebar.selectbox("Statut", [ALL, *statuses], key="status_filter")
     shown = filter_runs(rows, project, status)
     if not shown:
@@ -364,7 +354,9 @@ def _status_banner(state: AgentProcessState) -> None:
     label = status_label(state)
     explanation = REASON_EXPLANATIONS.get(state.terminal_reason or "", "")
     message = f"**{label}**" + (f" — {explanation}" if explanation else "")
-    if state.status is ProcessStatus.COMPLETED and state.terminal_reason is None:
+    if state.undone:
+        st.info(message)
+    elif state.status is ProcessStatus.COMPLETED and state.terminal_reason is None:
         st.success(message)
     elif state.status is ProcessStatus.COMPLETED or state.status is ProcessStatus.AWAITING_APPROVAL:
         st.warning(message)
@@ -372,9 +364,14 @@ def _status_banner(state: AgentProcessState) -> None:
         st.error(message)
     else:  # a step was running when the agent stopped (crash, Ctrl+C, provider error)
         st.info(f"{message} — si l'agent n'est plus ouvert, reprends ce run avec `/resume {state.run_id}`.")
-    if state.error_message and state.terminal_reason not in (None, "human_rejected"):
+    if state.error_message and state.terminal_reason != "human_rejected":
         with st.expander("Détail technique de l'erreur"):
             st.code(state.error_message)
+    if state.compensation is not None and not state.compensation.done:
+        st.warning(
+            "Le nettoyage de la copie de travail du run a échoué : "
+            f"{md_escape(state.compensation.detail or '')}. Supprime-la à la main (`git worktree prune`)."
+        )
 
 
 def _timeline(view: RunView) -> None:
@@ -392,7 +389,7 @@ def _run_details(view: RunView, db: Path, mock: bool, script: Path | None) -> No
     file = state.target_file or "fichier pas encore choisi"
     st.caption(md_escape(f"Projet {project_name(state)} · {file} · {state.target_repo_path}"))
     _status_banner(state)
-    _decision_panel(view, db, mock, script, _limits(settings))
+    _decision_panel(view, db, mock, script, settings.limits())
 
     compute = sum(m.compute_ms for m in view.metrics)
     wait = sum(m.wait_ms for m in view.metrics)

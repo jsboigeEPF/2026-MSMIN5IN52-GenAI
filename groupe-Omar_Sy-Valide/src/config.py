@@ -6,6 +6,8 @@ from typing import Literal
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from src.process.graph import Limits
+
 PROJECT_DIR = Path(__file__).resolve().parents[1]  # groupe-Omar_Sy-Valide/
 ENV_FILE = PROJECT_DIR / ".env"  # read from the project, whatever repository the agent is launched in
 DEFAULT_DB = PROJECT_DIR / "omar-sy-valide.db"  # one journal for every target repository
@@ -40,6 +42,9 @@ class Settings(BaseSettings):
     def _legacy_auto(cls, value: object) -> object:
         """`auto` (Docker required) predates the write gate; local runs are now the default."""
         return "subprocess" if value == "auto" else value
+
+    def limits(self) -> Limits:
+        return Limits(max_fix=self.MAX_FIX, max_revisions=self.MAX_REVISIONS)
 
     def usd_to_eur(self, usd: float) -> float:
         return usd * self.USD_EUR_RATE

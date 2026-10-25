@@ -80,6 +80,8 @@ EDGE_LABELS = {
 
 
 def status_label(state: AgentProcessState) -> str:
+    if state.undone:
+        return "Annulé (fichier restauré)"
     if state.terminal_reason == "written_despite_failing_tests":
         return "Terminé (tests en échec)"
     return STATUS_LABELS[state.status]
