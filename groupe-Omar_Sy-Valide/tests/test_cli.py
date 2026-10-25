@@ -7,6 +7,8 @@ from typer.testing import CliRunner
 
 from src.cli import app, fetch_key_info
 from src.config import Settings
+from src.llm.client import ChatRequest, ChatResponse, LLMProviderError
+from src.llm.fake import FakeLLM
 from tests.conftest import FIXED_CALC
 
 cli = CliRunner()
@@ -97,3 +99,21 @@ async def test_fetch_key_info_reads_usage_without_exposing_the_key() -> None:
     assert seen[0].headers["Authorization"] == "Bearer sk-or-secret"
     assert info == {"label": "sk-or-v1-abc...xyz", "usage": 0.42, "limit": 5.0}
     assert "sk-or-secret" not in json.dumps(info)
+
+
+def test_provider_error_is_one_line_with_a_resume_hint(
+    git_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def blocked(self: FakeLLM, request: ChatRequest) -> ChatResponse:
+        raise LLMProviderError("planner (vendor/m): HTTP 404: Model blocked by guardrail")
+
+    monkeypatch.setattr(FakeLLM, "complete", blocked)
+    result = cli.invoke(
+        app,
+        ["start", "--db", str(tmp_path / "x.db"), "--mock-llm", "--repo", str(git_repo), "--file", "calc.py"]
+        + ["--prompt", "p", "--run-id", "blocked-1"],
+    )
+    assert result.exit_code == 1
+    assert "HTTP 404: Model blocked by guardrail" in result.output
+    assert "resume blocked-1" in result.output
+    assert "Traceback" not in result.output

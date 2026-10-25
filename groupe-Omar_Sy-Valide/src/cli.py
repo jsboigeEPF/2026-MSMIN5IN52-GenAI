@@ -10,7 +10,9 @@ Without it, the OpenRouter models configured in `.env` are used.
 
 import asyncio
 import json
+import logging
 import os
+import uuid
 from collections.abc import AsyncGenerator, Coroutine
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -24,7 +26,7 @@ from semantic_kernel import Kernel
 from src.clock import SystemClock
 from src.config import Settings
 from src.kernel_factory import build_kernel
-from src.llm.client import ChatBackend, LLMClient, OpenRouterBackend
+from src.llm.client import ChatBackend, LLMClient, LLMProviderError, OpenRouterBackend
 from src.llm.fake import FakeLLM, FakeScriptExhaustedError
 from src.models.state import AgentProcessState
 from src.observability.telemetry import build_tracer_provider, generate_evaluation_report
@@ -43,10 +45,26 @@ DEFAULT_DB = Path("mini-opencode.db")
 T = TypeVar("T")
 
 
-def _run(coro: Coroutine[Any, Any, T]) -> T:
+@app.callback()
+def _configure_logging() -> None:
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+    # Semantic Kernel logs every failed call with the full provider payload; the CLI reports it in one line.
+    logging.getLogger("semantic_kernel").setLevel(logging.CRITICAL)
+
+
+def _run(coro: Coroutine[Any, Any, T], run_id: str | None = None) -> T:
     """Run a command; expected errors become a one-line message and exit code 1."""
     try:
         return asyncio.run(coro)
+    except LLMProviderError as exc:
+        typer.secho(f"error: {exc}", err=True, fg=typer.colors.RED)
+        if run_id:
+            typer.echo(
+                "the run is saved at its last completed step; fix the cause (e.g. the model in .env), then: "
+                f"python -m src.cli resume {run_id}",
+                err=True,
+            )
+        raise typer.Exit(1) from None
     except (
         DecisionRefusedError,
         LookupError,
@@ -141,6 +159,7 @@ def start(
     trace: Trace = False,
 ) -> None:
     """Start a run: plan, code and verify, then stop at human approval."""
+    new_id = run_id or uuid.uuid4().hex[:12]
 
     async def go() -> str:
         async with _runner(db, drive=True, mock=mock_llm, script=mock_script, trace_console=trace) as runner:
@@ -150,12 +169,12 @@ def start(
                 target_file=file,
                 user_prompt=prompt,
                 scenario=scenario,
-                run_id=run_id,
+                run_id=new_id,
             )
-            new_id = await runner.start(request)
+            await runner.start(request)
             return await _describe(runner, await runner.status(new_id))
 
-    typer.echo(_run(go()))
+    typer.echo(_run(go(), new_id))
 
 
 @app.command()
@@ -187,7 +206,7 @@ def decide(
             request = DecisionRequest(action=action, actor=actor, comment=comment)
             return await _describe(runner, await runner.decide(run_id, request))
 
-    typer.echo(_run(go()))
+    typer.echo(_run(go(), run_id))
 
 
 @app.command()
@@ -204,7 +223,7 @@ def resume(
         async with _runner(db, drive=True, mock=mock_llm, script=mock_script, trace_console=trace) as runner:
             return await _describe(runner, await runner.resume(run_id))
 
-    typer.echo(_run(go()))
+    typer.echo(_run(go(), run_id))
 
 
 @app.command()
