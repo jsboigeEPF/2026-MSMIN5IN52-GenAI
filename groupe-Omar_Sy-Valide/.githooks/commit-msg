@@ -1,0 +1,8 @@
+#!/bin/sh
+msg="$1"
+if grep -qiE '^(Co-authored-by:.*(claude|anthropic)|Claude-Session:)' "$msg"; then
+  echo "commit-msg: remove Claude attribution, use team Co-authored-by trailers" >&2; exit 1
+fi
+if ! grep -qiE '^Co-authored-by: ' "$msg"; then
+  echo "commit-msg: add a Co-authored-by trailer for your teammate(s)" >&2; exit 1
+fi
