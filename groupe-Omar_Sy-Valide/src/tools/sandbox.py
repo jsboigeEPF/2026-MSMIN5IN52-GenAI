@@ -102,7 +102,7 @@ class SandboxRunner:
             "--network",
             "none",
             "-v",
-            f"{worktree_path}:/work",
+            f"{worktree_path}:/work:ro",  # tested code must not alter what gets reviewed and committed
             "-w",
             "/work",
             self.image,

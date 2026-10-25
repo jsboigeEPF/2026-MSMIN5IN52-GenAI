@@ -243,6 +243,11 @@ class FinalizationStep:
         if state.run_branch is None:
             raise RuntimeError(f"run {state.run_id} has no run branch")
         message = f"mini-opencode: {state.user_prompt.splitlines()[0][:60]}\n\nRun: {state.run_id}"
+        if not self._matches_approved(worktree / state.target_file, state.generated_code):
+            state.error_message = (
+                f"{state.target_file} changed after it was verified and approved; refusing to commit it"
+            )
+            return StepResult(Event.COMMIT_FAILED)
         try:
             ctx.git.commit(worktree, state.target_file, message)
             state.git_commit_hash = ctx.git.merge_ff(repo, state.base_branch, state.run_branch)
@@ -254,3 +259,10 @@ class FinalizationStep:
             state.error_message = f"post-commit check failed on {state.base_branch}:\n{output[-2000:]}"
             return StepResult(Event.POST_COMMIT_CHECK_FAILED)
         return StepResult(Event.COMMITTED)
+
+    @staticmethod
+    def _matches_approved(path: Path, approved: str | None) -> bool:
+        """Byte-for-byte check that the file about to be committed is exactly the approved code."""
+        if approved is None or not path.exists():
+            return False
+        return path.read_bytes() == approved.encode("utf-8")

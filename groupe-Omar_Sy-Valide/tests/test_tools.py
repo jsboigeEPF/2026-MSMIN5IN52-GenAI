@@ -211,7 +211,7 @@ def test_docker_command_isolates_network_and_mounts_worktree(tmp_path: Path) -> 
     cmd = SandboxRunner(mode="docker", timeout_sec=10, image="img")._docker_cmd(tmp_path, ["pytest"], "c1")
     assert cmd[:3] == ["docker", "run", "--rm"]
     assert ["--network", "none"] == cmd[cmd.index("--network") : cmd.index("--network") + 2]
-    assert f"{tmp_path}:/work" in cmd and cmd[-2:] == ["img", "pytest"]
+    assert f"{tmp_path}:/work:ro" in cmd and cmd[-2:] == ["img", "pytest"]
 
 
 @pytest.mark.skipif(
@@ -238,6 +238,23 @@ async def test_docker_sandbox_has_no_network(git_repo: Path) -> None:
     runner = SandboxRunner(mode="docker", timeout_sec=120, image="mini-opencode-sandbox:latest")
     passed, output = await runner.run_pytest(git_repo)
     assert passed, output
+
+
+@pytest.mark.skipif(
+    not sandbox.docker_available("mini-opencode-sandbox:latest"),
+    reason="Docker daemon or sandbox image unavailable (docker build -t mini-opencode-sandbox sandbox/)",
+)
+async def test_docker_sandbox_cannot_modify_the_worktree(git_repo: Path) -> None:
+    (git_repo / "calc.py").write_text(FIXED_CALC)
+    (git_repo / "tests" / "test_tamper.py").write_text(
+        "import pytest\n\n\ndef test_tamper():\n"
+        "    with pytest.raises(OSError):\n"
+        "        open('calc.py', 'w').write('tampered')\n"
+    )
+    runner = SandboxRunner(mode="docker", timeout_sec=120, image="mini-opencode-sandbox:latest")
+    passed, output = await runner.run_pytest(git_repo)
+    assert passed, output
+    assert (git_repo / "calc.py").read_text() == FIXED_CALC
 
 
 # --- GitOps -------------------------------------------------------------------------------------------
