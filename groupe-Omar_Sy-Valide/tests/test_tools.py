@@ -7,7 +7,7 @@ from src.tools import sandbox
 from src.tools.git_ops import GitError, GitOps
 from src.tools.inspector import CodeInspector
 from src.tools.patch import PatchEngine
-from src.tools.sandbox import SandboxRunner
+from src.tools.sandbox import SandboxRunner, SandboxUnavailableError
 from src.tools.workspace import WorkspaceManager
 from tests.conftest import BUGGY_CALC, FIXED_CALC, git
 
@@ -185,11 +185,26 @@ async def test_subprocess_environment_has_no_secrets(git_repo: Path, monkeypatch
     assert passed, output
 
 
-def test_auto_mode_falls_back_to_subprocess(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sandbox, "docker_available", lambda image: False)
-    assert SandboxRunner(mode="auto", timeout_sec=10, image="img").mode == "subprocess"
+def test_auto_mode_uses_docker_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sandbox, "docker_available", lambda image: True)
     assert SandboxRunner(mode="auto", timeout_sec=10, image="img").mode == "docker"
+
+
+def test_auto_mode_fails_closed_without_docker(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sandbox, "docker_available", lambda image: False)
+    with pytest.raises(SandboxUnavailableError, match="SANDBOX_MODE=subprocess"):
+        SandboxRunner(mode="auto", timeout_sec=10, image="img")
+
+
+async def test_explicit_subprocess_mode_warns_on_every_run(
+    git_repo: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    runner = subprocess_runner()
+    with caplog.at_level("WARNING", logger="src.tools.sandbox"):
+        await runner.run_pytest(git_repo)
+        await runner.run_linter(git_repo, "calc.py")
+    host_warnings = [r for r in caplog.records if "on the host" in r.getMessage()]
+    assert len(host_warnings) == 3  # once at construction, once per run
 
 
 def test_docker_command_isolates_network_and_mounts_worktree(tmp_path: Path) -> None:
@@ -207,6 +222,22 @@ async def test_docker_sandbox_runs_pytest(git_repo: Path) -> None:
     runner = SandboxRunner(mode="docker", timeout_sec=120, image="mini-opencode-sandbox:latest")
     passed, output = await runner.run_pytest(git_repo)
     assert not passed and "1 failed" in output
+
+
+@pytest.mark.skipif(
+    not sandbox.docker_available("mini-opencode-sandbox:latest"),
+    reason="Docker daemon or sandbox image unavailable (docker build -t mini-opencode-sandbox sandbox/)",
+)
+async def test_docker_sandbox_has_no_network(git_repo: Path) -> None:
+    (git_repo / "calc.py").write_text(FIXED_CALC)
+    (git_repo / "tests" / "test_net.py").write_text(
+        "import socket\n\nimport pytest\n\n\ndef test_no_network():\n"
+        "    with pytest.raises(OSError):\n"
+        "        socket.create_connection(('1.1.1.1', 53), timeout=3)\n"
+    )
+    runner = SandboxRunner(mode="docker", timeout_sec=120, image="mini-opencode-sandbox:latest")
+    passed, output = await runner.run_pytest(git_repo)
+    assert passed, output
 
 
 # --- GitOps -------------------------------------------------------------------------------------------
