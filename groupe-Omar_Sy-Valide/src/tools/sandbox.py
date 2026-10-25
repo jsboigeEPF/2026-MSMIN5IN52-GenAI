@@ -7,13 +7,16 @@ those who want it; it fails closed if Docker or the image is missing.
 """
 
 import asyncio
+import json
 import os
 import shutil
 import subprocess
 import sys
 import uuid
+from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Literal
+from typing import Any, Literal, cast
 
 SandboxMode = Literal["subprocess", "docker"]
 
@@ -39,9 +42,42 @@ _ENV_ALLOWLIST = (
 )
 _MAX_OUTPUT_CHARS = 20_000
 _PYTEST_ARGS = ("-m", "pytest", "-q", "-p", "no:cacheprovider")
+_PYTEST_OK = (0, 5)  # 5 = no tests collected: a repository without tests has nothing to fail
 # EXE001/EXE002 check the executable bit, which the agent neither generates nor commits, and which
 # Docker Desktop bind mounts report as set on every file.
-_RUFF_ARGS = ("check", "--no-cache", "--extend-ignore", "EXE001,EXE002")
+_RUFF_ARGS = ("check", "--no-cache", "--extend-ignore", "EXE001,EXE002", "--output-format", "json")
+
+
+@dataclass(frozen=True)
+class _Result:
+    code: int | None  # None: timed out
+    stdout: str
+    stderr: str
+
+    @property
+    def text(self) -> str:
+        return (self.stdout + self.stderr)[-_MAX_OUTPUT_CHARS:]
+
+
+def _violations(result: _Result) -> list[dict[str, Any]] | None:
+    """Ruff's JSON report, or None if ruff itself failed (bad config, crash, timeout)."""
+    if result.code not in (0, 1):
+        return None
+    try:
+        data: object = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError:
+        return None
+    return cast(list[dict[str, Any]], data) if isinstance(data, list) else None
+
+
+def _code(violation: dict[str, Any]) -> str:
+    return str(violation.get("code") or "syntax-error")
+
+
+def _describe(file: str, violation: dict[str, Any]) -> str:
+    location = cast(dict[str, Any], violation.get("location") or {})
+    where = f"{file}:{location.get('row', '?')}:{location.get('column', '?')}"
+    return f"{where}: {_code(violation)} {violation.get('message', '')}"
 
 
 def docker_available(image: str) -> bool:
@@ -73,23 +109,54 @@ class SandboxRunner:
 
     async def run_pytest(self, worktree_path: Path) -> tuple[bool, str]:
         if self.mode == "docker":
-            return await self._run_docker(worktree_path, ["python", *_PYTEST_ARGS])
-        return await self._run([sys.executable, *_PYTEST_ARGS], cwd=worktree_path, env=_sandbox_env())
+            result = await self._run_docker(worktree_path, ["python", *_PYTEST_ARGS])
+        else:
+            result = await self._run([sys.executable, *_PYTEST_ARGS], cwd=worktree_path, env=_sandbox_env())
+        if result.code == 5:
+            return True, result.text + "\n(no tests in the repository: nothing to run)"
+        return result.code in _PYTEST_OK, result.text
 
-    async def run_linter(self, worktree_path: Path, file: str) -> tuple[bool, str]:
+    async def run_linter(
+        self, worktree_path: Path, file: str, baseline: str | None = None
+    ) -> tuple[bool, str]:
+        """Ruff with the target repository's own configuration. With `baseline` (the file before the run),
+        only violations the change introduces count: the agent is not blamed for code it did not write."""
         target = str(PurePosixPath(Path(file).as_posix()))
-        if self.mode == "docker":
-            return await self._run_docker(worktree_path, ["ruff", *_RUFF_ARGS, target])
-        return await self._run(
-            [sys.executable, "-m", "ruff", *_RUFF_ARGS, target],
-            cwd=worktree_path,
-            env=_sandbox_env(),
-        )
+        after_run = await self._ruff(worktree_path, [target])
+        after = _violations(after_run)
+        if after is None:
+            return False, after_run.text or f"ruff failed (exit code {after_run.code})"
+        before: list[dict[str, Any]] = []
+        if baseline is not None:
+            before = (
+                _violations(await self._ruff(worktree_path, ["--stdin-filename", target, "-"], baseline))
+                or []
+            )
+        remaining = Counter(_code(v) for v in before)
+        new: list[dict[str, Any]] = []
+        for violation in after:
+            if remaining[_code(violation)] > 0:
+                remaining[_code(violation)] -= 1
+            else:
+                new.append(violation)
+        lines = [_describe(target, v) for v in new]
+        if ignored := len(after) - len(new):
+            lines.append(f"({ignored} pre-existing violation(s) ignored: they were already in the file)")
+        return not new, "\n".join(lines) or "All checks passed!"
 
-    def _docker_cmd(self, worktree_path: Path, cmd: list[str], name: str) -> list[str]:
+    async def _ruff(self, worktree_path: Path, args: list[str], stdin: str | None = None) -> _Result:
+        if self.mode == "docker":
+            return await self._run_docker(worktree_path, ["ruff", *_RUFF_ARGS, *args], stdin)
+        cmd = [sys.executable, "-m", "ruff", *_RUFF_ARGS, *args]
+        return await self._run(cmd, cwd=worktree_path, env=_sandbox_env(), stdin=stdin)
+
+    def _docker_cmd(
+        self, worktree_path: Path, cmd: list[str], name: str, interactive: bool = False
+    ) -> list[str]:
         return [
             "docker",
             "run",
+            *(["-i"] if interactive else []),
             "--rm",
             "--name",
             name,
@@ -103,22 +170,32 @@ class SandboxRunner:
             *cmd,
         ]
 
-    async def _run_docker(self, worktree_path: Path, cmd: list[str]) -> tuple[bool, str]:
+    async def _run_docker(self, worktree_path: Path, cmd: list[str], stdin: str | None = None) -> _Result:
         name = f"mini-opencode-{uuid.uuid4().hex[:12]}"
-        passed, output = await self._run(self._docker_cmd(worktree_path, cmd, name), cwd=None, env=None)
-        if output.startswith("TIMEOUT"):
+        docker_cmd = self._docker_cmd(worktree_path, cmd, name, interactive=stdin is not None)
+        result = await self._run(docker_cmd, cwd=None, env=None, stdin=stdin)
+        if result.code is None:
             subprocess.run(["docker", "kill", name], capture_output=True)
-        return passed, output
+        return result
 
-    async def _run(self, cmd: list[str], cwd: Path | None, env: dict[str, str] | None) -> tuple[bool, str]:
+    async def _run(
+        self, cmd: list[str], cwd: Path | None, env: dict[str, str] | None, stdin: str | None = None
+    ) -> _Result:
         proc = await asyncio.create_subprocess_exec(
-            *cmd, cwd=cwd, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+            *cmd,
+            cwd=cwd,
+            env=env,
+            stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
+        data = stdin.encode("utf-8") if stdin is not None else None
         try:
-            out, _ = await asyncio.wait_for(proc.communicate(), timeout=self.timeout_sec)
+            out, err = await asyncio.wait_for(proc.communicate(data), timeout=self.timeout_sec)
         except TimeoutError:
             proc.kill()
             await proc.wait()
-            return False, f"TIMEOUT: command timed out after {self.timeout_sec}s: {' '.join(cmd[-4:])}"
-        text = out.decode("utf-8", errors="replace")[-_MAX_OUTPUT_CHARS:]
-        return proc.returncode == 0, text
+            return _Result(
+                None, "", f"TIMEOUT: command timed out after {self.timeout_sec}s: {' '.join(cmd[-4:])}"
+            )
+        return _Result(proc.returncode, out.decode("utf-8", "replace"), err.decode("utf-8", "replace"))

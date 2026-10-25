@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     BUDGET_EUR_TOTAL: float = Field(default=10.0, gt=0)
 
     APPROVAL_TIMEOUT_SEC: int = Field(default=3600, gt=0)
-    MAX_FIX: int = Field(default=2, ge=0)
+    MAX_FIX: int = Field(default=10, ge=0)  # automatic fixes before the human decides
     MAX_REVISIONS: int = Field(default=5, ge=0)  # shared by the plan and write gates
 
     # "subprocess": local run of human-approved code, secrets stripped from its environment.

@@ -244,7 +244,7 @@ class VerificationStep:
         ctx.patch.apply(worktree, target, state.generated_code or "")
         (pytest_ok, pytest_out), (lint_ok, lint_out) = await asyncio.gather(
             ctx.require_sandbox().run_pytest(worktree),
-            ctx.require_sandbox().run_linter(worktree, target),
+            ctx.require_sandbox().run_linter(worktree, target, baseline=state.original_file_content),
         )
         usage, summary = LLMUsage(), None
         if not (pytest_ok and lint_ok):
@@ -314,7 +314,8 @@ class HumanApprovalStep:
         if decision.action == "revise":
             state.revision_iteration += 1
             state.human_feedback = decision.comment
-            state.verification = None  # a human revision starts a fresh attempt
+            state.verification = None  # a human revision starts a fresh attempt...
+            state.fix_iteration = 0  # ...with a fresh budget of automatic fixes
         return self._EVENTS[decision.action]
 
 

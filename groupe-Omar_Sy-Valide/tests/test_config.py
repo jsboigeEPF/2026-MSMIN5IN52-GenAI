@@ -32,7 +32,7 @@ def test_defaults_without_env() -> None:
     assert s.OPENROUTER_BASE_URL == "https://openrouter.ai/api/v1"
     assert s.OPENROUTER_API_KEY is None
     assert s.PLANNER_MODEL == s.CODER_MODEL == s.SUMMARIZER_MODEL == ""
-    assert s.MAX_FIX == 2 and s.MAX_REVISIONS == 5
+    assert s.MAX_FIX == 10 and s.MAX_REVISIONS == 5
     assert s.SANDBOX_MODE == "subprocess"  # code runs only after a human approved it
     assert s.BUDGET_EUR_TOTAL == 10.0
 
@@ -41,7 +41,7 @@ def test_empty_values_from_env_example_fall_back_to_defaults(monkeypatch: pytest
     monkeypatch.setenv("MAX_FIX", "")
     monkeypatch.setenv("USD_EUR_RATE", "")
     s = Settings(_env_file=None)
-    assert s.MAX_FIX == 2
+    assert s.MAX_FIX == 10
     assert s.USD_EUR_RATE > 0
 
 

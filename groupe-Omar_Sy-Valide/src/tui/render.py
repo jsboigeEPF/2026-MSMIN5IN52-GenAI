@@ -11,7 +11,7 @@ from rich.syntax import Syntax
 from rich.text import Text
 
 from src.models.state import AgentProcessState, ProcessStatus, VerificationResult
-from src.process.graph import GATES, TRANSITIONS, Step
+from src.process.graph import GATES, TRANSITIONS, Limits, Step, fixes_exhausted
 from src.safe_text import printable
 
 STEP_LABELS = {
@@ -26,6 +26,24 @@ GATE_QUESTIONS = {
     "plan": "Valider ce plan ?",
     "write": "Écrire ce fichier puis lancer les tests ?",
 }
+
+
+def write_anyway(state: AgentProcessState, limits: Limits) -> bool:
+    """At the write gate after the automatic fixes ran out: "Oui" writes the failing code as is."""
+    return state.current_step == Step.WRITE_APPROVAL and fixes_exhausted(state, limits)
+
+
+def gate_question(state: AgentProcessState, limits: Limits) -> Text:
+    if write_anyway(state, limits):
+        return Text(
+            f"Les tests échouent encore après {limits.max_fix} corrections automatiques. "
+            "Écrire quand même, affiner (a) ou abandonner (n) ?",
+            style="bold red",
+        )
+    gate = "plan" if state.current_step == Step.PLAN_APPROVAL else "write"
+    return Text(GATE_QUESTIONS[gate])
+
+
 TERMINAL_REASONS = {
     "human_rejected": "refusé",
     "max_iterations": "trop de demandes d'affinage",
@@ -83,17 +101,20 @@ def verification_text(v: VerificationResult) -> Text:
 def outcome_panel(state: AgentProcessState, cost_eur: float) -> Panel:
     cost = f"coût du run : {cost_eur:.5f} €"
     if state.status is ProcessStatus.COMPLETED:
+        failing = state.terminal_reason == "written_despite_failing_tests"
         body = Text.assemble(
-            ("✓ ", "bold green"),
+            ("! " if failing else "✓ ", "bold yellow" if failing else "bold green"),
             (printable(state.target_file or ""), "bold"),
-            " écrit dans ton dossier (non commité).\n",
+            " écrit dans ton dossier (non commité)",
+            (", alors que les tests échouent" if failing else "", "bold yellow"),
+            ".\n",
             ("/undo", "bold"),
             " pour annuler, ",
             ("git diff", "bold"),
             " pour relire.\n",
             (cost, "dim"),
         )
-        return Panel(body, title="Terminé", title_align="left", border_style="green")
+        return Panel(body, title="Terminé", title_align="left", border_style="yellow" if failing else "green")
     reason = TERMINAL_REASONS.get(state.terminal_reason or "", state.terminal_reason or state.status.value)
     body = Text.assemble(("✗ ", "bold red"), f"{reason}. Aucun fichier modifié.\n")
     if state.error_message and state.terminal_reason != "human_rejected":

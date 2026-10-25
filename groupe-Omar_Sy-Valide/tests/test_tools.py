@@ -298,3 +298,23 @@ def test_an_interrupted_mirroring_is_redone(git_repo: Path) -> None:
     (git_repo / "calc.py").write_text(FIXED_CALC)
     assert ws.create("run-1")[0] == path
     assert (path / "calc.py").read_text() == FIXED_CALC
+
+
+async def test_a_repository_without_tests_passes(tmp_path: Path) -> None:
+    (tmp_path / "app.py").write_text("x = 1\n")
+    passed, output = await subprocess_runner().run_pytest(tmp_path)
+    assert passed and "no tests in the repository" in output
+
+
+async def test_linter_only_counts_violations_the_change_introduces(git_repo: Path) -> None:
+    # The repository's own ruff config (RUF100 = unused noqa) flags a line the agent did not write.
+    (git_repo / "pyproject.toml").write_text('[tool.ruff.lint]\nextend-select = ["RUF100"]\n')
+    original = "import os  # noqa: E402\n\n\nprint(os.sep)\n"
+    (git_repo / "app.py").write_text(original + "x = 1\n")
+    passed, output = await subprocess_runner().run_linter(git_repo, "app.py", baseline=original)
+    assert passed, output
+    assert "pre-existing violation(s) ignored" in output
+
+    (git_repo / "app.py").write_text(original + "import sys\n")
+    passed, output = await subprocess_runner().run_linter(git_repo, "app.py", baseline=original)
+    assert not passed and "app.py:5:8: F401" in output and "RUF100" not in output

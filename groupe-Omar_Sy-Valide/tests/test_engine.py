@@ -169,18 +169,40 @@ async def test_failed_verification_resubmits_the_fix_to_the_write_gate(
     assert (git_repo / "calc.py").read_text() == FIXED_CALC
 
 
-async def test_exhausted_fixes_fail_the_run_without_touching_the_user_tree(
+async def test_exhausted_fixes_hand_the_failing_code_back_to_the_human(
     git_repo: Path, make_runner: RunnerFactory
 ) -> None:
     runner = make_runner(FakeLLM({"planner": [PLAN], "coder": [BAD_PATCH, BAD_PATCH]}), MAX_FIX=1)
     run_id = await runner.start(start_request(git_repo))
     await runner.decide(run_id, approve())
     await runner.decide(run_id, approve())
-    state = await runner.decide(run_id, approve())
+    state = await runner.decide(run_id, approve())  # second BAD_PATCH fails too: no fix left
 
-    assert (state.status, state.terminal_reason) == (ProcessStatus.FAILED, "fixes_exhausted")
-    assert state.compensation is not None and state.compensation.action == "discard_worktree"
+    assert state.status is ProcessStatus.AWAITING_APPROVAL and state.current_step == "write_approval"
+    assert state.fix_iteration == 2 and state.verification is not None
+    assert not state.verification.pytest_passed
     assert (git_repo / "calc.py").read_text() == BUGGY_CALC
+
+    state = await runner.decide(run_id, approve())  # "write anyway"
+    assert (state.status, state.terminal_reason) == (ProcessStatus.COMPLETED, "written_despite_failing_tests")
+    assert (git_repo / "calc.py").read_text() == BAD_PATCH.new_content
+
+
+async def test_refining_after_exhaustion_gives_a_fresh_fix_budget(
+    git_repo: Path, make_runner: RunnerFactory
+) -> None:
+    fake = FakeLLM({"planner": [PLAN], "coder": [BAD_PATCH, GOOD_PATCH]})
+    runner = make_runner(fake, MAX_FIX=0)
+    run_id = await runner.start(start_request(git_repo))
+    await runner.decide(run_id, approve())
+    state = await runner.decide(run_id, approve())  # BAD_PATCH fails, MAX_FIX=0: back to the human
+    assert state.current_step == "write_approval" and state.fix_iteration == 1
+
+    state = await runner.decide(run_id, DecisionRequest(action="revise", actor="a", comment="use +"))
+    assert state.current_step == "write_approval" and state.fix_iteration == 0
+    state = await runner.decide(run_id, approve())  # new code: tested, not written blindly
+    assert (state.status, state.terminal_reason) == (ProcessStatus.COMPLETED, None)
+    assert state.verification is not None and state.verification.pytest_passed
 
 
 async def test_invalid_llm_output_fails_the_run_and_cleans_up(

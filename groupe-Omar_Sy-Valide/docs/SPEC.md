@@ -171,15 +171,17 @@ plan ──PlanCreated──▶ plan_approval
 plan_approval ──Approved──▶ code
 plan_approval ──RevisionRequested [revision_iteration < MAX_REVISIONS]──▶ plan   (human_feedback injected)
 code ──CodeGenerated──▶ write_approval            (diff computed, nothing written)
-write_approval ──Approved──▶ verify
+write_approval ──Approved [fix_iteration ≤ MAX_FIX]──▶ verify
+write_approval ──Approved [fix_iteration > MAX_FIX]──▶ finalize   ("write anyway": the code shown is the one that failed)
 write_approval ──RevisionRequested [revision_iteration < MAX_REVISIONS]──▶ code  (human_feedback injected)
 <either gate> ──RevisionRequested [revision_iteration ≥ MAX_REVISIONS]──▶ compensate (REJECTED, "max_iterations")
 <either gate> ──Rejected──▶ compensate (REJECTED, "human_rejected")
 <either gate> ──Expired──▶ compensate (EXPIRED, "approval_expired")
 verify ──VerificationPassed──▶ finalize           (approved file written in the worktree, then tested)
 verify ──VerificationFailed [fix_iteration < MAX_FIX]──▶ code   (auto-fix: the fix goes back to the write gate)
-verify ──VerificationFailed [fix_iteration ≥ MAX_FIX]──▶ compensate (FAILED, "fixes_exhausted")
-finalize ──Written──▶ COMPLETED                   (file written in the user's working tree, not committed)
+verify ──VerificationFailed [fix_iteration ≥ MAX_FIX]──▶ write_approval   (the human decides: refine, reject, write anyway)
+finalize ──Written [tests pass]──▶ COMPLETED      (file written in the user's working tree, not committed)
+finalize ──Written [tests fail]──▶ COMPLETED ("written_despite_failing_tests")
 finalize ──WriteFailed──▶ compensate (FAILED, "write_failed")   (file edited meanwhile: nothing overwritten)
 ```
 
@@ -214,7 +216,8 @@ Both gates: set `AWAITING_APPROVAL` and `approval_deadline = clock.now() + APPRO
 
 **Step 3 – `VerificationStep`** (tools + `summarizer`)
 - Writes the approved content into the worktree, then runs `run_pytest` and `run_linter` concurrently (`asyncio.gather`).
-- On failure: `summarizer` condenses the output (in mock mode: deterministic truncation), increments `fix_iteration`.
+- pytest exit code 5 (no tests collected) counts as a pass. Ruff runs with the target repository's configuration and fails only on violations the change introduces (baseline: the original content, linted through stdin under the same path).
+- On failure: `summarizer` condenses the output (in mock mode: deterministic truncation), increments `fix_iteration`. A human "refine" resets `fix_iteration` (fresh budget of `MAX_FIX` = 10 automatic fixes).
 - Emits `VerificationPassed` or `VerificationFailed` (routing per table).
 
 **Step 4 – `FinalizationStep`** (+ `CompensationHandler`)
@@ -257,9 +260,10 @@ Mandatory scenarios (`test_scenarios.py`):
 
 Additional tests:
 6. `test_refine_plan_then_refine_diff` – refine at the plan gate (feedback in the planner prompt), then at the write gate (feedback and previous proposal in the coder prompt); `MAX_REVISIONS` exceeded → `REJECTED` (`max_iterations`).
-7. `test_auto_fix_loop` – first patch fails tests, the fix goes back to the write gate, then passes; exhausting `MAX_FIX` → `FAILED` (`fixes_exhausted`).
+7. `test_auto_fix_loop` – first patch fails tests, the fix goes back to the write gate, then passes; exhausting `MAX_FIX` hands the failing code back to the write gate (refine, reject, or write anyway → `COMPLETED` / `written_despite_failing_tests`).
 8. `test_write_conflict` – the user edits the file during the run → `FAILED` (`write_failed`), nothing overwritten.
 9. `test_budget_cap` – fake usage above `MAX_COST_EUR_PER_RUN` → `FAILED` (`budget_exceeded`).
+10. `test_project_without_tests_and_with_old_lint_debt` – no test suite and pre-existing lint violations → `COMPLETED`.
 Plus unit tests for every tool and for the transition table.
 
 ---

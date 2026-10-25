@@ -210,9 +210,15 @@ class OmarApp(App[None]):
     def show_gate(self, gate: str | None) -> None:
         bar = self.query_one("#gate")
         bar.set_class(gate is not None, "visible")
-        if gate is not None:
-            self.query_one("#gate-question", Static).update(render.GATE_QUESTIONS[gate])
-            self.query_one("#approve", Button).focus()
+        if gate is not None and self.state is not None and self.runner is not None:
+            self.query_one("#gate-question", Static).update(
+                render.gate_question(self.state, self.runner.limits)
+            )
+            anyway = render.write_anyway(self.state, self.runner.limits)
+            approve = self.query_one("#approve", Button)
+            approve.label = "Écrire quand même (o)" if anyway else "Oui (o)"
+            approve.variant = "warning" if anyway else "success"
+            approve.focus()
         else:
             self.query_one("#prompt", Input).focus()
         self.refresh_bindings()

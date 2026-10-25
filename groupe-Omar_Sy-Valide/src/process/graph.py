@@ -5,7 +5,8 @@ state: no LLM ever decides a transition.
 
 Two human gates: the plan (before any code is generated) and the write (before the proposed file is written
 and tested), so no code runs before a human has read it. The approved file is written to the user's working
-tree without a commit.
+tree without a commit. When the automatic fixes are used up, the write gate comes back with the failing code:
+the human refines it (fresh fix budget), rejects it, or has it written anyway.
 
 Counters are incremented before routing (a failed verification bumps `fix_iteration`, a "revise" decision
 at either gate bumps `revision_iteration`), so the spec's `fix_iteration < MAX_FIX` (counted before the
@@ -82,8 +83,19 @@ def _fix_left(s: AgentProcessState, lim: Limits) -> bool:
     return s.fix_iteration <= lim.max_fix
 
 
-def _fix_exhausted(s: AgentProcessState, lim: Limits) -> bool:
+def fixes_exhausted(s: AgentProcessState, lim: Limits) -> bool:
+    """The automatic fixes are used up: the code at the write gate is the last one tested, and it failed.
+
+    A human "refine" resets `fix_iteration`, so new code never reaches the write gate in this state."""
     return not _fix_left(s, lim)
+
+
+def _verified(s: AgentProcessState, lim: Limits) -> bool:
+    return s.verification is not None and s.verification.pytest_passed and s.verification.linter_passed
+
+
+def _not_verified(s: AgentProcessState, lim: Limits) -> bool:
+    return not _verified(s, lim)
 
 
 def _revision_left(s: AgentProcessState, lim: Limits) -> bool:
@@ -101,10 +113,10 @@ def _discard(status: ProcessStatus, reason: str) -> Terminal:
 COMPLETED = Terminal(ProcessStatus.COMPLETED, None, None)
 
 
-def _gate(step: Step, approved: Step, revised: Step) -> tuple[Transition, ...]:
-    """The four exits of a human gate. Both gates share the revision counter."""
+def _gate(step: Step, approved: tuple[Transition, ...], revised: Step) -> tuple[Transition, ...]:
+    """The exits of a human gate. Both gates share the revision counter."""
     return (
-        Transition(step, Event.APPROVED, approved, "approved"),
+        *approved,
         Transition(
             step,
             Event.REVISION_REQUESTED,
@@ -127,9 +139,32 @@ def _gate(step: Step, approved: Step, revised: Step) -> tuple[Transition, ...]:
 
 TRANSITIONS: tuple[Transition, ...] = (
     Transition(Step.PLAN, Event.PLAN_CREATED, Step.PLAN_APPROVAL, "plan ready"),
-    *_gate(Step.PLAN_APPROVAL, approved=Step.CODE, revised=Step.PLAN),
+    *_gate(
+        Step.PLAN_APPROVAL,
+        approved=(Transition(Step.PLAN_APPROVAL, Event.APPROVED, Step.CODE, "approved"),),
+        revised=Step.PLAN,
+    ),
     Transition(Step.CODE, Event.CODE_GENERATED, Step.WRITE_APPROVAL, "diff ready, nothing written"),
-    *_gate(Step.WRITE_APPROVAL, approved=Step.VERIFY, revised=Step.CODE),
+    *_gate(
+        Step.WRITE_APPROVAL,
+        approved=(
+            Transition(
+                Step.WRITE_APPROVAL,
+                Event.APPROVED,
+                Step.VERIFY,
+                "approved: write in the worktree and test",
+                _fix_left,
+            ),
+            Transition(
+                Step.WRITE_APPROVAL,
+                Event.APPROVED,
+                Step.FINALIZE,
+                "write anyway (tests still fail)",
+                fixes_exhausted,
+            ),
+        ),
+        revised=Step.CODE,
+    ),
     Transition(Step.VERIFY, Event.VERIFICATION_PASSED, Step.FINALIZE, "tests and lint pass"),
     Transition(
         Step.VERIFY,
@@ -142,11 +177,18 @@ TRANSITIONS: tuple[Transition, ...] = (
     Transition(
         Step.VERIFY,
         Event.VERIFICATION_FAILED,
-        _discard(ProcessStatus.FAILED, "fixes_exhausted"),
-        "fixes exhausted",
-        _fix_exhausted,
+        Step.WRITE_APPROVAL,
+        "fixes exhausted: the human decides",
+        fixes_exhausted,
     ),
-    Transition(Step.FINALIZE, Event.WRITTEN, COMPLETED, "file written, not committed"),
+    Transition(Step.FINALIZE, Event.WRITTEN, COMPLETED, "file written, not committed", _verified),
+    Transition(
+        Step.FINALIZE,
+        Event.WRITTEN,
+        Terminal(ProcessStatus.COMPLETED, "written_despite_failing_tests", None),
+        "written although tests fail",
+        _not_verified,
+    ),
     Transition(
         Step.FINALIZE, Event.WRITE_FAILED, _discard(ProcessStatus.FAILED, "write_failed"), "write refused"
     ),

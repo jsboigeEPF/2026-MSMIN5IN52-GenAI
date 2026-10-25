@@ -201,3 +201,25 @@ def test_control_characters_from_the_repository_are_shown_not_sent(make_state: S
         assert "\x1b[2K" not in out.getvalue() and "\x1b]52" not in out.getvalue()
         assert "\x1b[8mhidden" not in out.getvalue()
     assert render.printable("a\x1bb\r\nc") == "a\\x1bb\nc"
+
+
+async def test_after_the_fixes_run_out_oui_means_write_anyway(
+    git_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MAX_FIX", "0")
+    bad = {"new_content": BUGGY_CALC.replace("a - b", "a * b"), "rationale": "wrong"}
+    llm = tmp_path / "bad.json"
+    llm.write_text(json.dumps({"planner": [PLAN], "coder": [bad]}))
+    app = OmarApp(git_repo, db=tmp_path / "t.db", llm_script=llm)
+    async with app.run_test(size=(140, 50)) as pilot:
+        await type_task(app, pilot, "Corrige add()")
+        for _ in range(2):
+            await pilot.press("o")
+            await settle(app, pilot)
+        assert app.pending_gate() == "write"
+        assert "Écrire quand même" in str(app.query_one("#approve").label)
+        await pilot.press("o")
+        await settle(app, pilot)
+        assert app.state is not None and app.state.terminal_reason == "written_despite_failing_tests"
+        assert "alors que les tests échouent" in transcript(app)
+    assert (git_repo / "calc.py").read_text() == bad["new_content"]

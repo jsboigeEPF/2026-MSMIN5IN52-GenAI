@@ -26,8 +26,14 @@ La spécification complète est dans [docs/SPEC.md](docs/SPEC.md).
 
 Graphe : `plan → plan_approval → code → write_approval → verify → finalize`. Il comporte deux portes
 humaines et trois boucles : affiner le plan (plan_approval → plan), affiner le diff (write_approval → code)
-et l'auto-correction (verify → code, dont la correction repasse par la validation de l'écriture). Toutes les
-autres issues mènent à une compensation (suppression du worktree). Détail dans [docs/SPEC.md](docs/SPEC.md) §5.
+et l'auto-correction (verify → code, dont la correction repasse par la validation de l'écriture). Après
+10 corrections automatiques sans succès, la main revient à l'humain avec l'erreur : affiner (10 nouveaux
+essais), abandonner, ou écrire quand même (issue `written_despite_failing_tests`). Toutes les autres issues
+mènent à une compensation (suppression du worktree).
+
+**Vérification juste.** Un dépôt sans tests passe (« aucun test »). ruff applique la configuration du projet
+cible, mais seules les violations introduites par le changement comptent : l'IA n'est pas pénalisée pour du
+code qui existait avant. Détail dans [docs/SPEC.md](docs/SPEC.md) §5.
 
 **Pourquoi plus de Docker.** Docker servait à exécuter le code généré *avant* que l'humain l'ait vu. Le diff
 est désormais validé avant toute écriture ou exécution : aucun code non relu ne tourne. Les tests sont donc
@@ -152,7 +158,7 @@ ruff check src tests
 pyright src      # mode strict
 ```
 
-181 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
+188 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
 
 - **Scénarios de bout en bout** (`tests/test_scenarios.py`, SPEC §8) : nominal (fichier choisi par l'IA),
   rejet à chaque porte, expiration, reprise en attente de validation, crash au milieu d'une étape (réponse
@@ -195,8 +201,8 @@ une mesure statistique : les chiffres de taux de complétion sont à compléter 
 - **Un seul fichier cible par run**, choisi par l'IA (ou imposé avec `--file` en CLI).
 - **Pas de commit** : le fichier est écrit dans le dossier de travail, et le commit reste à la main de
   l'utilisateur. Si le fichier est modifié pendant le run, rien n'est écrasé (`write_failed`).
-- **`MAX_FIX` couvre tout le run** : il n'est pas remis à zéro après une révision humaine. `MAX_REVISIONS`
-  (5 par défaut) est partagé par les deux portes.
+- **`MAX_FIX` (10 par défaut)** est remis à zéro quand l'humain affine le diff. `MAX_REVISIONS` (5 par
+  défaut) est partagé par les deux portes. Une valeur dans `.env` remplace ces défauts.
 - **Modèles limités par la clé du cours** (8 modèles autorisés) ; un modèle refusé laisse le run reprenable.
 - **Exécution locale par défaut** : seul du code relu et approuvé tourne, mais sans isolation réseau ni
   disque. `SANDBOX_MODE=docker` ajoute cette isolation.

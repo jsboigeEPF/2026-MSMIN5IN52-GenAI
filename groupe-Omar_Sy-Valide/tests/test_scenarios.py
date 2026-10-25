@@ -177,8 +177,9 @@ async def test_auto_fix_loop(git_repo: Path, make_runner: RunnerFactory) -> None
     run_id = await exhausted.start(request(git_repo, "run-2"))
     for _ in range(4):
         state = await exhausted.decide(run_id, decision("approve"))
-    assert (state.status, state.terminal_reason) == (ProcessStatus.FAILED, "fixes_exhausted")
-    assert state.fix_iteration == 3
+    assert state.current_step == "write_approval" and state.fix_iteration == 3  # back to the human
+    state = await exhausted.decide(run_id, decision("reject"))
+    assert (state.status, state.terminal_reason) == (ProcessStatus.REJECTED, "human_rejected")
 
 
 # 8 -----------------------------------------------------------------------------------------------------
@@ -208,3 +209,21 @@ async def test_budget_cap(git_repo: Path, make_runner: RunnerFactory, store: Sql
     assert state.compensation is not None and state.compensation.action == "discard_worktree"
     [plan_metric] = await store.list_metrics(state.run_id)
     assert (plan_metric.status, plan_metric.cost_usd) == ("failed", 1.0)  # the paid call is accounted
+
+
+# 10 ----------------------------------------------------------------------------------------------------
+async def test_project_without_tests_and_with_old_lint_debt(
+    git_repo: Path, make_runner: RunnerFactory
+) -> None:
+    """The cuisine_rag case: no test suite, and lint rules the original file already broke."""
+    git(git_repo, "rm", "-q", "-r", "tests")
+    (git_repo / "pyproject.toml").write_text('[tool.ruff.lint]\nextend-select = ["RUF100", "UP"]\n')
+    legacy = "from typing import Optional\n\n\ndef add(a: Optional[int], b: int) -> int:  # noqa: E501\n"
+    (git_repo / "calc.py").write_text(legacy + "    return a - b\n")
+    git(git_repo, "commit", "-qam", "no tests, lint debt")
+    patch = CodePatch(new_content=legacy + "    return (a or 0) + b\n", rationale="fix")
+    runner = make_runner(FakeLLM({"planner": [PLAN], "coder": [patch]}))
+    run_id = await runner.start(request(git_repo))
+    await runner.decide(run_id, decision("approve"))
+    state = await runner.decide(run_id, decision("approve"))
+    assert (state.status, state.terminal_reason) == (ProcessStatus.COMPLETED, None), state.verification
