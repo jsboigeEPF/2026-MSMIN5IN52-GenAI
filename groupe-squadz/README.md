@@ -51,6 +51,7 @@ python -m src.generator
 Depuis le dossier `groupe-squadz`, installez les dépendances puis lancez :
 
 ```bash
+cd groupe-squadz
 pip install -r requirements.txt
 streamlit run app.py
 ```
