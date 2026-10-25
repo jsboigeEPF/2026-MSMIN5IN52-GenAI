@@ -44,6 +44,12 @@ cp .env.example .env               # puis renseigner les valeurs localement ; ne
 
 Les valeurs vides de `.env` reprennent les valeurs par défaut de `src/config.py`.
 
+Sandbox Docker (optionnelle ; sans elle, `SANDBOX_MODE=auto` utilise un sous-processus sans variables secrètes) :
+
+```bash
+docker build -t mini-opencode-sandbox sandbox/   # pytest + ruff, exécuté avec --network none
+```
+
 ### Hook de commit (chaque membre, une fois)
 
 Depuis la racine du dépôt :
@@ -86,8 +92,11 @@ python -m src.cli --help   # disponible à partir de la phase 4
 pytest
 ```
 
-Phase 1 : 41 tests unitaires (configuration, horloge injectée, modèles, stockage SQLite avec journaux
-append-only, traces OpenTelemetry, rapport d'évaluation). Les scénarios de bout en bout arrivent en phase 4.
+82 tests unitaires, tous sans réseau : configuration, horloge injectée, modèles, stockage SQLite (journaux
+append-only), traces OpenTelemetry, rapport d'évaluation, couche LLM (faux LLM scripté, cache, relance sur
+sortie invalide, plafond de budget, requête OpenRouter vérifiée via un transport HTTP simulé) et outils sur un
+dépôt git temporaire (worktree, AST, patch, sandbox, commit / fast-forward / revert). Le test de la sandbox
+Docker est ignoré si l'image n'est pas construite. Les scénarios de bout en bout arrivent en phase 4.
 
 ```bash
 ruff check src tests
