@@ -10,7 +10,9 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from src.safe_text import control_chars_error
 
 
 class ProcessStatus(StrEnum):
@@ -54,14 +56,30 @@ class VerificationResult(BaseModel):
     error_summary: str | None = None
 
 
+def _reject_control_chars(value: str) -> str:
+    """LLM output is shown to a human before it may run: refuse what could hide part of it on screen."""
+    if reason := control_chars_error(value):
+        raise ValueError(reason)
+    return value
+
+
 class CodePatch(BaseModel):  # structured LLM output of Step 2
     new_content: str
     rationale: str
+
+    _clean = field_validator("new_content", "rationale")(_reject_control_chars)
 
 
 class PlanOutput(BaseModel):  # structured LLM output of Step 1
     target_file: str  # repository-relative path of the one file to change, chosen by the planner
     steps: list[str]
+
+    _clean_file = field_validator("target_file")(_reject_control_chars)
+
+    @field_validator("steps")
+    @classmethod
+    def _clean_steps(cls, steps: list[str]) -> list[str]:
+        return [_reject_control_chars(step) for step in steps]
 
 
 class ErrorSummary(BaseModel):  # structured LLM output of Step 3 (summarizer)

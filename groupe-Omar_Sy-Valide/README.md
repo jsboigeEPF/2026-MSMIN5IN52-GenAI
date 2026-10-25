@@ -18,7 +18,7 @@
   ensuite un diff, validé de la même façon. Une fois le diff approuvé, le fichier est écrit dans un worktree
   git isolé, où pytest et ruff le vérifient. Si les tests passent, le fichier est copié dans le dossier de
   l'utilisateur, **sans commit** (`/undo` pour annuler). Journal d'exécution SQLite, traces OpenTelemetry,
-  coût suivi par run, mode `--mock` sans réseau.
+  coût suivi par run.
 
 La spécification complète est dans [docs/SPEC.md](docs/SPEC.md).
 
@@ -88,7 +88,6 @@ Puis `/reload-plugins` dans Claude Code (ou redémarrage).
 
 ```bash
 python omar.py ../../demo-calc          # le dépôt à modifier (défaut : dossier courant)
-python omar.py ../../demo-calc --mock   # démo sans réseau (script demo/mock-calc.json)
 ```
 
 Le venv n'a pas besoin d'être activé : `omar.py` se relance de lui-même avec `.venv/`. Une fois le projet
@@ -100,7 +99,13 @@ Dans l'interface :
 - `/runs`, `/resume <id>`, `/undo`, `/repo <chemin>`, `/clear`, `/help`, `/quit` (ou Ctrl+Q).
 
 La colonne de droite suit le graphe en direct : étape courante, étapes passées, boucles, compteurs et coût.
-Chaque décision est enregistrée avec ton login comme évaluateur.
+Chaque décision est enregistrée avec ton login comme évaluateur. L'affichage se remet en page quand on
+redimensionne le terminal ; les journaux des bibliothèques vont dans `omar.log` et pas à l'écran.
+
+**Sécurité de l'affichage.** Le diff est le seul garde-fou avant l'exécution du code. Une réponse du modèle
+qui contient des caractères de contrôle (par exemple `ESC[2K`, qui efface une ligne à l'écran et pourrait
+cacher du code au relecteur) est donc refusée comme sortie invalide. Tout texte venant du modèle ou du dépôt
+est affiché avec ces caractères rendus visibles (`\x1b`), jamais envoyés au terminal.
 
 ## CLI (mêmes runs, une commande à la fois)
 
@@ -147,7 +152,7 @@ ruff check src tests
 pyright src      # mode strict
 ```
 
-180 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
+181 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
 
 - **Scénarios de bout en bout** (`tests/test_scenarios.py`, SPEC §8) : nominal (fichier choisi par l'IA),
   rejet à chaque porte, expiration, reprise en attente de validation, crash au milieu d'une étape (réponse
@@ -199,7 +204,8 @@ une mesure statistique : les chiffres de taux de complétion sont à compléter 
   à `127.0.0.1` ; le nom de l'évaluateur est déclaratif. Il ne doit pas être exposé sur un réseau sans un
   proxy authentifiant devant lui. Les textes issus du LLM et des outils sont affichés échappés (pas de
   Markdown actif, donc pas d'image ni de lien injectés).
-- **Plan B de démonstration** : `python omar.py <dépôt> --mock` (aucun appel réseau, comportement déterministe).
+- **Faux LLM réservé aux tests** : `pytest` n'appelle jamais OpenRouter. L'agent interactif utilise
+  toujours les vrais modèles du `.env`.
 
 ## Répartition du travail
 

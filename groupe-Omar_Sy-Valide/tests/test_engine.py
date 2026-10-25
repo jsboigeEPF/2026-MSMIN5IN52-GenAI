@@ -417,3 +417,15 @@ async def test_starting_on_another_branch_than_the_checked_out_one_is_refused(
     request = start_request(git_repo).model_copy(update={"base_branch": "release"})
     with pytest.raises(ValueError, match="check out 'release'"):
         await make_runner(FakeLLM({})).start(request)
+
+
+async def test_generated_code_with_terminal_escapes_is_refused(
+    git_repo: Path, make_runner: RunnerFactory
+) -> None:
+    # ESC[2K erases the line on screen: the reviewer would approve code they never saw.
+    hidden = {"new_content": FIXED_CALC + "import os  # \x1b[2K\n", "rationale": "r"}
+    runner = make_runner(FakeLLM({"planner": [PLAN], "coder": [hidden, hidden]}))
+    run_id = await runner.start(start_request(git_repo))
+    state = await runner.decide(run_id, approve())
+    assert (state.status, state.terminal_reason) == (ProcessStatus.FAILED, "invalid_llm_output")
+    assert state.error_message is not None and "control character" in state.error_message

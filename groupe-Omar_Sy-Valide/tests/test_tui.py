@@ -1,18 +1,20 @@
 """The interactive agent, driven headless with Textual's Pilot and the fake LLM (no network, no terminal)."""
 
+import io
 import json
 from datetime import datetime
 from pathlib import Path
 
 import pytest
+from rich.console import Console
 from textual.pilot import Pilot
-from textual.widgets import Input, RichLog
+from textual.widgets import Input
 
 from src.models.state import ProcessStatus
 from src.process.engine import DecisionRequest, StartRequest
 from src.runtime import open_runner
 from src.tui import render
-from src.tui.app import DEMO_SCRIPT, OmarApp, find_repo
+from src.tui.app import OmarApp, find_repo
 from tests.conftest import BUGGY_CALC, FIXED_CALC, StateFactory, git
 
 PLAN = {"target_file": "calc.py", "steps": ["use + in add()"]}
@@ -26,8 +28,7 @@ def script(tmp_path: Path, planner: int = 1, coder: int = 1) -> Path:
 
 
 def transcript(app: OmarApp) -> str:
-    log = app.query_one("#chat", RichLog)
-    return "\n".join("".join(segment.text for segment in strip) for strip in log.lines)
+    return "\n".join(app.transcript)
 
 
 async def settle(app: OmarApp, pilot: Pilot[None]) -> None:
@@ -45,7 +46,7 @@ async def type_task(app: OmarApp, pilot: Pilot[None], text: str) -> None:
 
 async def test_task_plan_yes_diff_yes_writes_the_file_without_commit(git_repo: Path, tmp_path: Path) -> None:
     base_sha = git(git_repo, "rev-parse", "HEAD")
-    app = OmarApp(git_repo, db=tmp_path / "t.db", mock=True, mock_script=script(tmp_path))
+    app = OmarApp(git_repo, db=tmp_path / "t.db", llm_script=script(tmp_path))
     async with app.run_test(size=(140, 50)) as pilot:
         await type_task(app, pilot, "Corrige add()")
         assert app.pending_gate() == "plan"
@@ -71,7 +72,7 @@ async def test_task_plan_yes_diff_yes_writes_the_file_without_commit(git_repo: P
 
 
 async def test_refine_sends_the_comment_and_shows_a_new_plan(git_repo: Path, tmp_path: Path) -> None:
-    app = OmarApp(git_repo, db=tmp_path / "t.db", mock=True, mock_script=script(tmp_path, planner=2))
+    app = OmarApp(git_repo, db=tmp_path / "t.db", llm_script=script(tmp_path, planner=2))
     async with app.run_test(size=(140, 50)) as pilot:
         await type_task(app, pilot, "Corrige add()")
         await pilot.press("a")
@@ -85,7 +86,7 @@ async def test_refine_sends_the_comment_and_shows_a_new_plan(git_repo: Path, tmp
 
 
 async def test_no_rejects_and_leaves_the_file_untouched(git_repo: Path, tmp_path: Path) -> None:
-    app = OmarApp(git_repo, db=tmp_path / "t.db", mock=True, mock_script=script(tmp_path))
+    app = OmarApp(git_repo, db=tmp_path / "t.db", llm_script=script(tmp_path))
     async with app.run_test(size=(140, 50)) as pilot:
         await type_task(app, pilot, "Corrige add()")
         await pilot.click("#reject")
@@ -96,7 +97,7 @@ async def test_no_rejects_and_leaves_the_file_untouched(git_repo: Path, tmp_path
 
 
 async def test_undo_and_runs_commands(git_repo: Path, tmp_path: Path) -> None:
-    app = OmarApp(git_repo, db=tmp_path / "t.db", mock=True, mock_script=script(tmp_path))
+    app = OmarApp(git_repo, db=tmp_path / "t.db", llm_script=script(tmp_path))
     async with app.run_test(size=(140, 50)) as pilot:
         await type_task(app, pilot, "Corrige add()")
         await pilot.press("o")
@@ -113,7 +114,7 @@ async def test_undo_and_runs_commands(git_repo: Path, tmp_path: Path) -> None:
 
 
 async def test_a_new_task_waits_for_the_pending_answer(git_repo: Path, tmp_path: Path) -> None:
-    app = OmarApp(git_repo, db=tmp_path / "t.db", mock=True, mock_script=script(tmp_path))
+    app = OmarApp(git_repo, db=tmp_path / "t.db", llm_script=script(tmp_path))
     async with app.run_test(size=(140, 50)) as pilot:
         await type_task(app, pilot, "Corrige add()")
         await type_task(app, pilot, "autre chose")
@@ -129,7 +130,7 @@ async def test_resume_picks_up_a_run_waiting_at_a_gate(git_repo: Path, tmp_path:
         )
         await runner.decide(run_id, DecisionRequest(action="approve", actor="alice"))
 
-    app = OmarApp(git_repo, db=db, mock=True, mock_script=mock)
+    app = OmarApp(git_repo, db=db, llm_script=mock)
     async with app.run_test(size=(140, 50)) as pilot:
         await type_task(app, pilot, "/resume r-1")
         assert app.pending_gate() == "write" and "+    return a + b" in transcript(app)
@@ -138,22 +139,11 @@ async def test_resume_picks_up_a_run_waiting_at_a_gate(git_repo: Path, tmp_path:
 async def test_the_agents_own_repository_is_refused(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="l'agent lui-même"):
         find_repo(Path(__file__).parent)
-    app = OmarApp(Path(__file__).parent, db=tmp_path / "t.db", mock=True, mock_script=script(tmp_path))
+    app = OmarApp(Path(__file__).parent, db=tmp_path / "t.db", llm_script=script(tmp_path))
     async with app.run_test(size=(140, 50)) as pilot:
         assert app.repo is None and "/repo <chemin>" in transcript(app)
         await type_task(app, pilot, "Corrige add()")
         assert "aucun dépôt cible" in transcript(app)
-
-
-def test_demo_script_fixes_the_demo_calc_repository() -> None:
-    data = json.loads(DEMO_SCRIPT.read_text(encoding="utf-8"))
-    assert all(p["target_file"] == "calc.py" for p in data["planner"])
-    namespace: dict[str, object] = {}
-    exec(data["coder"][0]["new_content"], namespace)  # noqa: S102  (our own fixture)
-    add, mean = namespace["add"], namespace["mean"]
-    assert add(2, 3) == 5 and mean([1, 2, 3]) == 2  # type: ignore[operator]
-    with pytest.raises(ValueError):
-        mean([])  # type: ignore[operator]
 
 
 def test_rendering_escapes_model_output(make_state: StateFactory) -> None:
@@ -161,15 +151,15 @@ def test_rendering_escapes_model_output(make_state: StateFactory) -> None:
     rendered = render.plan_panel(state).renderable
     assert "[bold red]not markup[/]" in str(rendered)
     side = render.sidebar(make_state(current_step="write_approval"), {"plan", "code"}, 0.0).plain
-    assert "⏸ Validation de l'écriture" in side and "✔ Planification" in side
-    assert "↺ write_approval → code" in side
+    assert "? Validation de l'écriture" in side and "✓ Planification" in side
+    assert "write_approval -> code" in side
 
 
 async def test_events_of_another_run_do_not_hijack_the_screen(git_repo: Path, tmp_path: Path) -> None:
     db, mock = tmp_path / "t.db", script(tmp_path, planner=2)
     async with open_runner(db, drive=True, mock=True, script=mock) as runner:  # an older run, about to expire
         await runner.start(StartRequest(target_repo_path=str(git_repo), user_prompt="old", run_id="old-1"))
-    app = OmarApp(git_repo, db=db, mock=True, mock_script=mock)
+    app = OmarApp(git_repo, db=db, llm_script=mock)
     async with app.run_test(size=(140, 50)) as pilot:
         await type_task(app, pilot, "Corrige add()")
         assert app.runner is not None
@@ -182,7 +172,7 @@ async def test_events_of_another_run_do_not_hijack_the_screen(git_repo: Path, tm
 
 
 async def test_a_slash_command_while_refining_is_not_sent_as_feedback(git_repo: Path, tmp_path: Path) -> None:
-    app = OmarApp(git_repo, db=tmp_path / "t.db", mock=True, mock_script=script(tmp_path))
+    app = OmarApp(git_repo, db=tmp_path / "t.db", llm_script=script(tmp_path))
     async with app.run_test(size=(140, 50)) as pilot:
         await type_task(app, pilot, "Corrige add()")
         await pilot.press("a")
@@ -197,3 +187,17 @@ class FrozenClock:
 
     def now(self) -> datetime:
         return self._now
+
+
+def test_control_characters_from_the_repository_are_shown_not_sent(make_state: StateFactory) -> None:
+    state = make_state(
+        target_file="calc.py",
+        unified_diff="-x = 1  # \x1b[2K\x1b]52;c;evil\x07\n+x = 2\n",
+        execution_plan=["step \x1b[8mhidden"],
+    )
+    for panel in (render.diff_panel(state), render.plan_panel(state)):
+        out = io.StringIO()
+        Console(file=out, width=120, force_terminal=True).print(panel)
+        assert "\x1b[2K" not in out.getvalue() and "\x1b]52" not in out.getvalue()
+        assert "\x1b[8mhidden" not in out.getvalue()
+    assert render.printable("a\x1bb\r\nc") == "a\\x1bb\nc"

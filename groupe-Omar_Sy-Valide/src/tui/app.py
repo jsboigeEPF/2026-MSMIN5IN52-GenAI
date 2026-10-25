@@ -10,18 +10,21 @@ The screen drives the same `ProcessRunner` as the CLI and the dashboard: every t
 
 import argparse
 import getpass
+import io
+import logging
 import uuid
 from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
+from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
-from textual.containers import Horizontal
-from textual.widgets import Button, Footer, Header, Input, RichLog, Static
+from textual.containers import Horizontal, VerticalScroll
+from textual.widgets import Button, Footer, Header, Input, Static
 
 from src.config import DEFAULT_DB, PROJECT_DIR, Settings
 from src.llm.client import LLMProviderError
@@ -31,6 +34,7 @@ from src.process.engine import DecisionRefusedError, DecisionRequest, ProcessRun
 from src.process.graph import GATES, Step
 from src.process.steps import HumanApprovalStep
 from src.runtime import open_runner
+from src.safe_text import printable
 from src.tools.git_ops import GitError, run_git
 from src.tools.sandbox import SandboxUnavailableError
 from src.tui import render
@@ -80,7 +84,8 @@ class OmarApp(App[None]):
     CSS = """
     #main { height: 1fr; }
     #chat { width: 1fr; padding: 0 1; }
-    #sidebar { width: 34; padding: 1 1; border-left: solid $primary-background; }
+    #chat > Static { width: 100%; height: auto; }
+    #sidebar { width: 34; height: 100%; padding: 1 1; border-left: solid $primary-background; }
     #gate { height: auto; padding: 0 1; display: none; background: $boost; }
     #gate.visible { display: block; }
     #gate-question { width: 1fr; padding: 1 0; text-style: bold; }
@@ -100,14 +105,13 @@ class OmarApp(App[None]):
         repo: Path | None = None,
         *,
         db: Path = DEFAULT_DB,
-        mock: bool = False,
-        mock_script: Path | None = None,
+        llm_script: Path | None = None,  # tests only: scripted fake LLM instead of OpenRouter
     ) -> None:
         super().__init__()
         self.repo_arg = repo
         self.db = db
-        self.mock = mock
-        self.mock_script = mock_script
+        self.llm_script = llm_script
+        self.transcript: list[str] = []  # plain text of everything shown, for tests and debugging
         self.actor = _login()
         self.repo: Path | None = None
         self.runner: ProcessRunner | None = None
@@ -124,7 +128,7 @@ class OmarApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
         with Horizontal(id="main"):
-            yield RichLog(id="chat", wrap=True, markup=False, min_width=40)
+            yield VerticalScroll(id="chat")
             yield Static(id="sidebar")
         with Horizontal(id="gate"):
             yield Static(id="gate-question")
@@ -139,14 +143,12 @@ class OmarApp(App[None]):
         self.say(Text(HELP, style="dim"))
         try:
             self.runner = await self._stack.enter_async_context(
-                open_runner(self.db, drive=True, mock=self.mock, script=self.mock_script)
+                open_runner(self.db, drive=True, mock=self.llm_script is not None, script=self.llm_script)
             )
         except EXPECTED_ERRORS as exc:
-            self.error(f"{exc}\nRenseigne .env (voir .env.example) ou lance avec --mock.")
+            self.error(f"{exc}\nRenseigne la clé et les modèles dans .env (voir .env.example).")
             return
         self.runner.on_event = self._on_engine_event
-        if self.mock:
-            self.say(Text("Mode mock : réponses scriptées, aucun appel réseau.", style="yellow"))
         self.set_repo(self.repo_arg or Path.cwd())
         self.refresh_sidebar()
         self.query_one("#prompt", Input).focus()
@@ -157,10 +159,16 @@ class OmarApp(App[None]):
     # --- output helpers ------------------------------------------------------------------------------------
 
     def say(self, renderable: Any) -> None:
-        self.query_one("#chat", RichLog).write(renderable)
+        """One block per message: a Static re-renders at the new width when the terminal is resized."""
+        chat = self.query_one("#chat", VerticalScroll)
+        chat.mount(Static(renderable))
+        chat.scroll_end(animate=False)
+        plain = Console(file=io.StringIO(), width=160, color_system=None, record=True)
+        plain.print(renderable)
+        self.transcript.append(plain.export_text())
 
     def error(self, message: str) -> None:
-        self.say(Text(f"✘ {message}", style="red"))
+        self.say(Text(f"✗ {printable(message)}", style="red"))
 
     def refresh_sidebar(self) -> None:
         self.query_one("#sidebar", Static).update(render.sidebar(self.state, self.visited, self.cost_eur))
@@ -310,7 +318,7 @@ class OmarApp(App[None]):
         if self.runner is None or self.state is None:
             return
         labels = {"approve": "Oui", "reject": "Non", "revise": f"Affiner : {comment}"}
-        self.say(Text(f"→ {labels[action]}", style="bold cyan"))
+        self.say(Text(f"> {printable(labels[action])}", style="bold cyan"))
         request = DecisionRequest(action=action, actor=self.actor, comment=comment)
         runner, run_id = self.runner, self.state.run_id
         self.run_engine(lambda: runner.decide(run_id, request))
@@ -356,7 +364,7 @@ class OmarApp(App[None]):
         elif name == "/quit":
             self.exit()
         elif name == "/clear":
-            self.query_one("#chat", RichLog).clear()
+            self.query_one("#chat", VerticalScroll).remove_children()
         elif name == "/repo":
             self.set_repo(Path(arg) if arg else Path.cwd())
         elif self.runner is None:
@@ -383,7 +391,12 @@ class OmarApp(App[None]):
         for column in ("run", "statut", "fichier", "tâche"):
             table.add_column(column)
         for r in runs:
-            table.add_row(r.run_id, r.status.value, r.target_file or "-", Text(r.user_prompt[:50]))
+            table.add_row(
+                r.run_id,
+                r.status.value,
+                Text(printable(r.target_file or "-")),
+                Text(printable(r.user_prompt[:50])),
+            )
         self.say(table)
 
     async def resume(self, run_id: str) -> None:
@@ -417,19 +430,18 @@ class OmarApp(App[None]):
         self.say(Text(f"↶ {state.target_file} restauré tel qu'avant le run {run_id}.", style="green"))
 
 
-DEMO_SCRIPT = PROJECT_DIR / "demo" / "mock-calc.json"
+LOG_FILE = PROJECT_DIR / "omar.log"
 
 
 def main(argv: list[str] | None = None) -> None:
-    """`python omar.py [repo] [--mock]`, or `omar` once the project is installed."""
+    """`python omar.py [repo]`, or `omar` once the project is installed."""
     parser = argparse.ArgumentParser(prog="omar", description="Agent de code avec validation humaine.")
     parser.add_argument("repo", nargs="?", type=Path, help="dépôt git à modifier (défaut : dossier courant)")
-    parser.add_argument("--mock", action="store_true", help="faux LLM scripté, aucun appel réseau")
-    parser.add_argument("--mock-script", type=Path, help=f"script JSON du faux LLM (défaut : {DEMO_SCRIPT})")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="base SQLite des runs")
     args = parser.parse_args(argv)
-    mock = args.mock or args.mock_script is not None
     Settings()  # fail fast on an invalid .env, before the screen takes over the terminal
-    OmarApp(
-        args.repo, db=args.db, mock=mock, mock_script=args.mock_script or (DEMO_SCRIPT if mock else None)
-    ).run()
+    # Library logs (Semantic Kernel, httpx, warnings) go to a file: anything written to the terminal
+    # behind Textual's back would corrupt the screen.
+    logging.basicConfig(filename=LOG_FILE, level=logging.WARNING, format="%(asctime)s %(name)s: %(message)s")
+    logging.captureWarnings(True)
+    OmarApp(args.repo, db=args.db).run()

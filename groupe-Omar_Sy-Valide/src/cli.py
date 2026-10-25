@@ -29,6 +29,7 @@ from src.observability.telemetry import generate_evaluation_report
 from src.process.engine import DecisionRefusedError, DecisionRequest, ProcessRunner, StartRequest
 from src.process.steps import HumanApprovalStep
 from src.runtime import open_runner
+from src.safe_text import printable
 from src.tools.git_ops import GitError
 from src.tools.sandbox import SandboxUnavailableError
 
@@ -109,7 +110,7 @@ async def _describe(runner: ProcessRunner, state: AgentProcessState) -> str:
         )
     if state.error_message:
         lines.append(f"error: {state.error_message}")
-    return "\n".join(lines)
+    return printable("\n".join(lines))  # LLM and repository text: no raw control character on the terminal
 
 
 @app.command()

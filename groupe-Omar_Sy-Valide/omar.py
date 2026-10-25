@@ -1,6 +1,6 @@
 """Lance Omar Sy Valide, l'agent de code interactif avec validation humaine.
 
-    python omar.py [chemin/du/depot] [--mock]
+    python omar.py [chemin/du/depot]
 
 Sans chemin, le dépôt cible est le dossier courant. Si les dépendances ne sont pas importables (venv non
 activé), le script se relance avec le Python de `.venv/`.
