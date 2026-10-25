@@ -160,6 +160,14 @@ class SqliteStore:
             )
         return [AgentProcessState.model_validate_json(r["state_json"]) for r in rows]
 
+    async def run_totals(self) -> dict[str, tuple[float, float, float]]:
+        """Per run: (cost in USD, machine time in ms, human wait in ms), in one query."""
+        rows = await self._fetch(
+            "SELECT run_id, SUM(cost_usd) AS cost, SUM(compute_ms) AS compute, SUM(wait_ms) AS wait "
+            "FROM metrics GROUP BY run_id"
+        )
+        return {r["run_id"]: (r["cost"] or 0.0, r["compute"] or 0.0, r["wait"] or 0.0) for r in rows}
+
     async def run_starts(self) -> dict[str, datetime]:
         """When each run started (its first journal entry), in one query."""
         rows = await self._fetch("SELECT run_id, MIN(ts) AS started FROM events GROUP BY run_id")

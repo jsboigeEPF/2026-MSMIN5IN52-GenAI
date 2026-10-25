@@ -50,6 +50,8 @@ from src.tools.sandbox import SandboxUnavailableError
 IDLE, VISITED, CURRENT = "#f4f4f5", "#dbeafe", "#fde68a"
 SUCCESS, FAILURE = "#bbf7d0", "#fecaca"
 ALL = "Tous"
+OVERVIEW = ""  # the "Vue d'ensemble" entry of the run picker
+BAR_COLOR = "#2a78d6"  # one hue: these charts compare magnitudes, they do not tell series apart
 _NEVER = datetime(1970, 1, 1, tzinfo=UTC)  # sorts runs or entries without a timestamp first
 
 
@@ -57,6 +59,29 @@ _NEVER = datetime(1970, 1, 1, tzinfo=UTC)  # sorts runs or entries without a tim
 class RunRow:
     state: AgentProcessState
     started: datetime | None
+    cost_usd: float = 0.0
+    compute_ms: float = 0.0
+    wait_ms: float = 0.0
+
+
+@dataclass(frozen=True)
+class Overview:
+    runs: int
+    written: int  # files written with passing tests
+    written_failing: int  # "write anyway"
+    stopped: int  # refused, expired or failed: nothing written
+    awaiting: int
+    cost_eur: float
+    budget_used_pct: float
+    compute_ms: float
+    wait_ms: float
+    by_status: dict[str, int]
+    cost_by_project: dict[str, float]
+
+    @property
+    def success_rate(self) -> float:
+        finished = self.written + self.written_failing + self.stopped
+        return self.written / finished if finished else 0.0
 
 
 @dataclass(frozen=True)
@@ -71,7 +96,7 @@ class RunView:
 @dataclass(frozen=True)
 class TimelineItem:
     at: datetime | None
-    icon: str
+    category: str  # Tâche, Plan, Code, Tests, Décision...
     title: str
     detail: str | None = None  # untrusted text, shown as code
     detail_kind: str = "text"  # "plan", "diff", "tests", "text"
@@ -86,7 +111,10 @@ async def load_runs(db: Path) -> list[RunRow]:
         await runner.sweep_expired()
         runs = await runner.store.list_runs()
         starts = await runner.store.run_starts()
-    rows = [RunRow(state, starts.get(state.run_id)) for state in runs]
+        totals = await runner.store.run_totals()
+    rows = [
+        RunRow(state, starts.get(state.run_id), *totals.get(state.run_id, (0.0, 0.0, 0.0))) for state in runs
+    ]
     return sorted(rows, key=lambda r: r.started or _NEVER, reverse=True)
 
 
@@ -124,10 +152,36 @@ def short(text: str, limit: int = 60) -> str:
 
 
 def run_label(row: RunRow) -> str:
-    """« 25/10 19:35 · cuisine_rag · Omar, propose moi une nouvelle… · Échoué »: what a person recognises."""
-    when = _local(row.started).strftime("%d/%m %H:%M") if row.started else "--/-- --:--"
-    parts = (when, project_name(row.state), short(row.state.user_prompt, 45), status_label(row.state))
-    return " · ".join(parts)
+    """« cuisine_rag · Ajoute un endpoint /recipes »: date and status are in the details and filters."""
+    return f"{project_name(row.state)} · {short(row.state.user_prompt, 40)}"
+
+
+def overview(rows: list[RunRow], settings: Settings) -> Overview:
+    """The whole history in a few numbers: what was written, what was stopped, what it cost."""
+    finished_ok = [r for r in rows if r.state.status is ProcessStatus.COMPLETED and not r.state.undone]
+    by_status: dict[str, int] = {}
+    cost_by_project: dict[str, float] = {}
+    for r in rows:
+        by_status[status_label(r.state)] = by_status.get(status_label(r.state), 0) + 1
+        project = project_name(r.state)
+        cost_by_project[project] = cost_by_project.get(project, 0.0) + settings.usd_to_eur(r.cost_usd)
+    cost_eur = settings.usd_to_eur(sum(r.cost_usd for r in rows))
+    return Overview(
+        runs=len(rows),
+        written=sum(r.state.terminal_reason is None for r in finished_ok),
+        written_failing=sum(r.state.terminal_reason is not None for r in finished_ok),
+        stopped=sum(
+            r.state.status in (ProcessStatus.REJECTED, ProcessStatus.EXPIRED, ProcessStatus.FAILED)
+            for r in rows
+        ),
+        awaiting=sum(r.state.status is ProcessStatus.AWAITING_APPROVAL for r in rows),
+        cost_eur=cost_eur,
+        budget_used_pct=100 * cost_eur / settings.BUDGET_EUR_TOTAL,
+        compute_ms=sum(r.compute_ms for r in rows),
+        wait_ms=sum(r.wait_ms for r in rows),
+        by_status=dict(sorted(by_status.items(), key=lambda kv: -kv[1])),
+        cost_by_project=dict(sorted(cost_by_project.items(), key=lambda kv: -kv[1])),
+    )
 
 
 def filter_runs(rows: list[RunRow], project: str, status: str) -> list[RunRow]:
@@ -144,14 +198,14 @@ def timeline(view: RunView) -> list[TimelineItem]:
     last_plan, last_code, last_tests = last.get(Step.PLAN), last.get(Step.CODE), last.get(Step.VERIFY)
     for e in view.events:
         if e.event_type == "run_started":
-            items.append(TimelineItem(e.ts, "📝", "Tâche reçue", state.user_prompt))
+            items.append(TimelineItem(e.ts, "Tâche", "Tâche reçue", state.user_prompt))
         elif e.event_type == "step_completed" and e.step == Step.PLAN:
             plan = "\n".join(f"{i}. {s}" for i, s in enumerate(state.execution_plan or [], 1))
             title = f"Plan proposé ({state.target_file or '?'})" if e.id == last_plan else "Plan proposé"
-            items.append(TimelineItem(e.ts, "🧭", title, plan if e.id == last_plan else None, "plan"))
+            items.append(TimelineItem(e.ts, "Plan", title, plan if e.id == last_plan else None, "plan"))
         elif e.event_type == "step_completed" and e.step == Step.CODE:
             diff = state.unified_diff if e.id == last_code else None
-            items.append(TimelineItem(e.ts, "✍️", "Code proposé", diff, "diff"))
+            items.append(TimelineItem(e.ts, "Code", "Code proposé", diff, "diff"))
         elif e.event_type == "step_completed" and e.step == Step.VERIFY:
             passed = (e.payload or {}).get("event") == "VerificationPassed"
             detail = None
@@ -159,28 +213,28 @@ def timeline(view: RunView) -> list[TimelineItem]:
                 v = state.verification
                 detail = v.error_summary or f"{v.pytest_output}\n{v.linter_output}".strip()
             title = "Tests réussis" if passed else "Tests en échec"
-            items.append(TimelineItem(e.ts, "✅" if passed else "❌", title, detail, "tests"))
+            items.append(TimelineItem(e.ts, "Tests", title, detail, "tests"))
         elif e.event_type == "suspended":
             gate = str((e.payload or {}).get("gate", ""))
             items.append(
-                TimelineItem(e.ts, "⏸️", f"En attente de ta décision sur {GATE_LABELS.get(gate, gate)}")
+                TimelineItem(e.ts, "Attente", f"En attente de ta décision sur {GATE_LABELS.get(gate, gate)}")
             )
         elif e.event_type == "step_completed" and e.step == Step.FINALIZE:
             if (e.payload or {}).get("event") == "Written":
-                items.append(TimelineItem(e.ts, "💾", f"Fichier écrit : {state.target_file}"))
+                items.append(TimelineItem(e.ts, "Écriture", f"Fichier écrit : {state.target_file}"))
             else:
-                items.append(TimelineItem(e.ts, "🛑", "Écriture refusée", state.error_message))
+                items.append(TimelineItem(e.ts, "Écriture", "Écriture refusée", state.error_message))
         elif e.event_type == "step_failed":
             reason = str((e.payload or {}).get("reason", ""))
-            items.append(TimelineItem(e.ts, "⚠️", f"Échec : {TERMINAL_REASONS.get(reason, reason)}"))
+            items.append(TimelineItem(e.ts, "Échec", f"Échec : {TERMINAL_REASONS.get(reason, reason)}"))
         elif e.event_type == "run_finished":
             reason = state.terminal_reason or ""
-            items.append(TimelineItem(e.ts, "🏁", status_label(state), REASON_EXPLANATIONS.get(reason)))
+            items.append(TimelineItem(e.ts, "Fin", status_label(state), REASON_EXPLANATIONS.get(reason)))
         elif e.event_type == "undone":
-            items.append(TimelineItem(e.ts, "↩️", "Écriture annulée (fichier restauré)"))
+            items.append(TimelineItem(e.ts, "Annulation", "Écriture annulée (fichier restauré)"))
     for d in view.approvals:
         title = f"{d.actor} {ACTION_LABELS[d.action]} {GATE_LABELS[d.gate]}"
-        items.append(TimelineItem(d.decided_at, "👤", title, d.comment))
+        items.append(TimelineItem(d.decided_at, "Décision", title, d.comment))
     return sorted(items, key=lambda i: i.at or _NEVER)
 
 
@@ -237,7 +291,15 @@ def _table(rows: list[dict[str, object]]) -> None:
 
 
 def _seconds(ms: float) -> str:
-    return f"{ms / 1000:.1f} s"
+    """12.3 s, 5 min 46 s, 1 h 02 min: readable at a glance."""
+    seconds = ms / 1000
+    if seconds < 60:
+        return f"{seconds:.1f} s"
+    minutes, sec = divmod(round(seconds), 60)
+    if minutes < 60:
+        return f"{minutes} min {sec:02d} s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours} h {minutes:02d} min"
 
 
 # --- page --------------------------------------------------------------------------------------------------
@@ -263,7 +325,7 @@ def _sidebar_settings() -> tuple[Path, bool, Path | None]:
     return db, mock, (Path(script_text) if script_text else None)
 
 
-def _pick_run(rows: list[RunRow]) -> str | None:
+def _pick_run(rows: list[RunRow]) -> str:
     projects = sorted({project_name(r.state) for r in rows})
     project = st.sidebar.selectbox("Projet", [ALL, *projects], key="project")
     statuses = sorted({status_label(r.state) for r in rows})
@@ -271,10 +333,10 @@ def _pick_run(rows: list[RunRow]) -> str | None:
     shown = filter_runs(rows, project, status)
     if not shown:
         st.sidebar.info("Aucun run ne correspond à ces filtres.")
-        return None
-    labels = {r.state.run_id: run_label(r) for r in shown}
+        return OVERVIEW
+    labels = {OVERVIEW: "Vue d'ensemble", **{r.state.run_id: run_label(r) for r in shown}}
     selected = st.sidebar.selectbox(
-        "Run", list(labels), format_func=lambda run_id: labels[run_id], key="run_id"
+        "Afficher", list(labels), format_func=lambda run_id: labels[run_id], key="run_id"
     )
     st.sidebar.button(
         "Rafraîchir", key="refresh", help="Recharge les runs et expire les validations dépassées"
@@ -377,7 +439,7 @@ def _status_banner(state: AgentProcessState) -> None:
 def _timeline(view: RunView) -> None:
     for item in timeline(view):
         when = _local(item.at).strftime("%H:%M:%S") if item.at else ""
-        st.markdown(f"{item.icon} **{md_escape(item.title)}** · {when}")
+        st.markdown(f":gray[{when} · {item.category}]  \n**{md_escape(item.title)}**")
         if item.detail:
             with st.expander("Voir le détail"):
                 st.code(item.detail, language="diff" if item.detail_kind == "diff" else None)
@@ -414,7 +476,7 @@ def _run_details(view: RunView, db: Path, mock: bool, script: Path | None) -> No
         if v is None:
             st.write("Pas encore testé.")
         else:
-            verdict = {True: "✅ réussi", False: "❌ en échec"}
+            verdict = {True: "réussi", False: "en échec"}
             st.write(
                 f"{v.tests_label} : {verdict[v.pytest_passed]} — {v.lint_label} : {verdict[v.linter_passed]}"
             )
@@ -463,20 +525,92 @@ def _run_details(view: RunView, db: Path, mock: bool, script: Path | None) -> No
         )
 
 
-def _all_runs(rows: list[RunRow]) -> None:
-    with st.expander(f"Tous les runs ({len(rows)})"):
+def _when(row: RunRow) -> str:
+    return _local(row.started).strftime("%d/%m %H:%M") if row.started else ""
+
+
+def _overview_page(rows: list[RunRow], settings: Settings) -> None:
+    o = overview(rows, settings)
+    st.markdown("## Vue d'ensemble")
+    st.caption(f"{o.runs} runs enregistrés, tous projets confondus. Choisis un run à gauche pour le détail.")
+    cost_col, runs_col, written_col, waiting_col = st.columns(4)
+    cost_col.metric(
+        "Coût total",
+        f"{o.cost_eur:.4f} €",
+        help=f"{o.budget_used_pct:.2f} % du budget de {settings.BUDGET_EUR_TOTAL:.0f} €",
+    )
+    runs_col.metric("Runs", o.runs)
+    written_col.metric(
+        "Fichiers écrits",
+        o.written + o.written_failing,
+        help=f"Dont écrits malgré des tests en échec : {o.written_failing}",
+    )
+    waiting_col.metric("En attente de décision", o.awaiting)
+    rate_col, stopped_col, compute_col, wait_col = st.columns(4)
+    rate_col.metric(
+        "Taux de réussite", f"{100 * o.success_rate:.0f} %", help="Runs terminés avec des tests OK"
+    )
+    stopped_col.metric("Arrêtés sans écriture", o.stopped, help="Refusés, expirés ou échoués")
+    compute_col.metric("Temps machine", _seconds(o.compute_ms))
+    wait_col.metric("Attente humaine", _seconds(o.wait_ms))
+
+    status_col, cost_chart_col = st.columns(2)
+    with status_col:
+        st.markdown("**Runs par statut**")
+        st.bar_chart(  # pyright: ignore[reportUnknownMemberType]
+            {"statut": list(o.by_status), "runs": list(o.by_status.values())},
+            x="statut",
+            y="runs",
+            horizontal=True,
+            color=BAR_COLOR,
+        )
+    with cost_chart_col:
+        st.markdown("**Coût par projet (€)**")
+        st.bar_chart(  # pyright: ignore[reportUnknownMemberType]
+            {"projet": list(o.cost_by_project), "coût (€)": list(o.cost_by_project.values())},
+            x="projet",
+            y="coût (€)",
+            horizontal=True,
+            color=BAR_COLOR,
+        )
+
+    st.markdown("### Ce qui a été fait")
+    done = [r for r in rows if r.state.status is ProcessStatus.COMPLETED]
+    if not done:
+        st.caption("Aucun fichier écrit pour l'instant.")
+    else:
         _table(
             [
                 {
-                    "date": _local(r.started).strftime("%d/%m %H:%M") if r.started else "",
+                    "date": _when(r),
                     "projet": project_name(r.state),
-                    "tâche": short(r.state.user_prompt, 80),
                     "fichier": r.state.target_file or "",
-                    "statut": status_label(r.state),
+                    "tâche": short(r.state.user_prompt, 90),
+                    "résultat": status_label(r.state),
+                    "coût (€)": round(settings.usd_to_eur(r.cost_usd), 5),
                 }
-                for r in rows
+                for r in done
             ]
         )
+    _all_runs(rows, settings)
+
+
+def _all_runs(rows: list[RunRow], settings: Settings) -> None:
+    st.markdown("### Tous les runs")
+    _table(
+        [
+            {
+                "date": _when(r),
+                "projet": project_name(r.state),
+                "tâche": short(r.state.user_prompt, 80),
+                "fichier": r.state.target_file or "",
+                "statut": status_label(r.state),
+                "coût (€)": round(settings.usd_to_eur(r.cost_usd), 5),
+                "temps machine": _seconds(r.compute_ms),
+            }
+            for r in rows
+        ]
+    )
 
 
 def main() -> None:
@@ -493,9 +627,10 @@ def main() -> None:
         st.info("Aucun run pour l'instant.")
         return
     selected = _pick_run(rows)
-    if selected is not None:
+    if selected == OVERVIEW:
+        _overview_page(rows, Settings())
+    else:
         _run_details(asyncio.run(load_run(db, selected)), db, mock, script)
-    _all_runs(rows)
 
 
 if __name__ == "__main__":

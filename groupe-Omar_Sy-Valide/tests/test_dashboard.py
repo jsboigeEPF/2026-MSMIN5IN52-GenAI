@@ -8,7 +8,8 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from src import dashboard
-from src.labels import EDGE_LABELS
+from src.config import Settings
+from src.labels import EDGE_LABELS, status_label
 from src.models.state import ProcessStatus, VerificationResult
 from src.process.engine import DecisionRequest, StartRequest
 from src.process.graph import TRANSITIONS, Step, Terminal
@@ -119,8 +120,11 @@ async def test_load_run_gathers_journal_approvals_metrics_and_cost(git_repo: Pat
     assert diff.detail is not None and "+    return a + b" in diff.detail
 
     [row] = await dashboard.load_runs(db)
-    label = dashboard.run_label(row)
-    assert label.endswith(" · target · Fix · Terminé") and "v-1" not in label
+    assert dashboard.run_label(row) == "target · Fix"  # short: date and status are in the details
+    summary = dashboard.overview([row], Settings(_env_file=None))
+    assert (summary.runs, summary.written, summary.stopped, summary.awaiting) == (1, 1, 0, 0)
+    assert summary.success_rate == 1.0 and summary.by_status == {"Terminé": 1}
+    assert summary.cost_by_project == {"target": 0.0} and summary.compute_ms > 0
     assert dashboard.filter_runs([row], "target", "Terminé") == [row]
     assert dashboard.filter_runs([row], dashboard.ALL, "Échoué") == []
     assert dashboard.filter_runs([row], "autre", dashboard.ALL) == []
@@ -138,8 +142,15 @@ def test_page_lists_the_run_and_approves_it(git_repo: Path, tmp_path: Path) -> N
     at.run()
     at.text_input(key="db_path").set_value(str(db)).run()
     assert not at.exception
-    assert at.selectbox(key="run_id").value == "ui-1"
-    assert "Fix add()" in at.selectbox(key="run_id").format_func("ui-1")  # a label, not the id
+    assert any("Vue d'ensemble" in m.value for m in at.markdown)  # the home page summarises every run
+    assert [m.label for m in at.metric][:4] == [
+        "Coût total",
+        "Runs",
+        "Fichiers écrits",
+        "En attente de décision",
+    ]
+    at.selectbox(key="run_id").set_value("ui-1").run()
+    assert at.selectbox(key="run_id").format_func("ui-1") == "target · Fix add()"  # a label, not the id
     assert any("En attente de ta décision" in w.value for w in at.warning)
 
     at.checkbox(key="mock_llm").check().run()
@@ -164,6 +175,7 @@ def test_page_refuses_revise_without_comment(git_repo: Path, tmp_path: Path) -> 
     at = AppTest.from_file(str(DASHBOARD), default_timeout=120)
     at.run()
     at.text_input(key="db_path").set_value(str(db)).run()
+    at.selectbox(key="run_id").set_value("ui-2").run()
     at.checkbox(key="mock_llm").check().run()
     at.text_input(key="actor").set_value("alice").run()
     at.button(key="revise").click().run()
@@ -207,6 +219,8 @@ async def test_page_never_renders_llm_or_tool_text_as_markdown(
         at = AppTest.from_file(str(DASHBOARD), default_timeout=60)
         at.run()
         at.text_input(key="db_path").set_value(str(db)).run()
+        assert not at.exception  # the overview renders the hostile run too
+        at.selectbox(key="run_id").set_value("evil-1").run()
         return at
 
     at = await asyncio.to_thread(render)  # AppTest runs its own event loop
@@ -240,5 +254,13 @@ def test_timeline_and_labels_tell_the_truth_about_the_file(make_state: StateFact
     undone = make_state(status=ProcessStatus.COMPLETED, undone=True)
     anyway = make_state(status=ProcessStatus.COMPLETED, terminal_reason="written_despite_failing_tests")
     rows = [dashboard.RunRow(undone, T0), dashboard.RunRow(anyway, T0)]
-    assert dashboard.run_label(rows[0]).endswith("Annulé (fichier restauré)")
+    assert status_label(undone) == "Annulé (fichier restauré)"
     assert dashboard.filter_runs(rows, dashboard.ALL, "Terminé (tests en échec)") == [rows[1]]
+
+
+def test_durations_read_at_a_glance() -> None:
+    assert [dashboard._seconds(ms) for ms in (12_300, 346_400, 3_725_000)] == [  # pyright: ignore[reportPrivateUsage]
+        "12.3 s",
+        "5 min 46 s",
+        "1 h 02 min",
+    ]

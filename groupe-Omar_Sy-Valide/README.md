@@ -162,8 +162,11 @@ python -m src.cli credits                # consommation de la clé OpenRouter (l
 streamlit run src/dashboard.py     # http://127.0.0.1:8501
 ```
 
-- **Runs reconnaissables** : « 25/10 19:35 · cuisine_rag · début de la tâche · Échoué » au lieu d'un
-  identifiant, avec des filtres par projet et par statut (en français).
+- **Vue d'ensemble** (page d'accueil) : coût total et part du budget, nombre de runs, fichiers écrits,
+  décisions en attente, taux de réussite, temps machine et attente humaine ; runs par statut et coût par
+  projet ; la liste de ce qui a été fait (fichiers écrits) et de tous les runs.
+- **Runs reconnaissables** : « cuisine_rag · début de la tâche » au lieu d'un identifiant ; la date et le
+  statut sont dans le détail, et on filtre par projet et par statut.
 - **Un run en un coup d'œil** : la tâche en titre, le statut expliqué en une phrase (ce qui s'est passé, et
   si ton dossier a été modifié), puis le coût, le temps machine et l'attente humaine.
 - **Déroulé** : une frise lisible (tâche reçue, plan proposé, ta décision, code proposé, tests, fichier
@@ -185,7 +188,7 @@ ruff check src tests
 pyright src      # mode strict
 ```
 
-200 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
+201 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
 
 - **Scénarios de bout en bout** (`tests/test_scenarios.py`, SPEC §8) : nominal (fichier choisi par l'IA),
   rejet à chaque porte, expiration, reprise en attente de validation, crash au milieu d'une étape (réponse
