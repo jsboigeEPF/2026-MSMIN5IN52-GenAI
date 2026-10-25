@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mini-opencode"
+version = "0.1.0"
+description = "Deterministic agentic coding process with human-in-the-loop approval (course B1)"
+requires-python = ">=3.11"
+dependencies = [
+    "semantic-kernel==1.45.0",
+    "openai==3.37.0",
+    "pydantic==2.13.5",
+    "pydantic-settings==2.16.1",
+    "aiosqlite==0.22.1",
+    "opentelemetry-api==1.45.1",
+    "opentelemetry-sdk==1.45.1",
+    "opentelemetry-exporter-otlp-proto-http==1.45.1",
+    "typer==0.27.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "ruff==0.17.2",
+    "pyright==1.1.414",
+]
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = ["spikes"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "strict"
+pythonVersion = "3.11"
+venvPath = "."
+venv = ".venv"
