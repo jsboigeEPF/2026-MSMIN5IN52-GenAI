@@ -11,29 +11,23 @@ Without it, the OpenRouter models configured in `.env` are used.
 import asyncio
 import json
 import logging
-import os
 import uuid
-from collections.abc import AsyncGenerator, Coroutine
-from contextlib import asynccontextmanager
+from collections.abc import Coroutine
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypeVar
 
 import httpx2
 import typer
-from opentelemetry.sdk.trace import TracerProvider
-from semantic_kernel import Kernel
 
-from src.clock import SystemClock
 from src.config import Settings
-from src.kernel_factory import build_kernel
-from src.llm.client import ChatBackend, LLMClient, LLMProviderError, OpenRouterBackend
-from src.llm.fake import FakeLLM, FakeScriptExhaustedError
+from src.llm.client import LLMProviderError
+from src.llm.fake import FakeScriptExhaustedError
 from src.models.state import AgentProcessState
-from src.observability.telemetry import build_tracer_provider, generate_evaluation_report
+from src.observability.telemetry import generate_evaluation_report
 from src.process.engine import DecisionRefusedError, DecisionRequest, ProcessRunner, StartRequest
-from src.storage.sqlite_store import SqliteStore
+from src.runtime import open_runner
 from src.tools.git_ops import GitError
-from src.tools.sandbox import SandboxRunner, SandboxUnavailableError
+from src.tools.sandbox import SandboxUnavailableError
 
 app = typer.Typer(help="Mini-OpenCode: deterministic coding agent with human approval.", no_args_is_help=True)
 
@@ -75,38 +69,6 @@ def _run(coro: Coroutine[Any, Any, T], run_id: str | None = None) -> T:
     ) as exc:
         typer.secho(f"error: {exc}", err=True, fg=typer.colors.RED)
         raise typer.Exit(1) from None
-
-
-@asynccontextmanager
-async def _runner(
-    db: Path, *, drive: bool, mock: bool = False, script: Path | None = None, trace_console: bool = False
-) -> AsyncGenerator[ProcessRunner]:
-    """A runner over `db`. Only commands that execute steps (`drive`) get an LLM client and a sandbox."""
-    settings = Settings()
-    provider: TracerProvider = build_tracer_provider(
-        console=trace_console, otlp=bool(os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"))
-    )
-    tracer = provider.get_tracer("mini-opencode")
-    try:
-        async with SqliteStore(db) as store:
-            llm, sandbox = None, None
-            if drive:
-                backend: ChatBackend
-                if mock:
-                    kernel = Kernel()
-                    backend = FakeLLM.from_file(script) if script else FakeLLM()
-                else:
-                    kernel = build_kernel(settings)
-                    backend = OpenRouterBackend(kernel)
-                llm = LLMClient(kernel, backend, store, settings, tracer)
-                sandbox = SandboxRunner(
-                    settings.SANDBOX_MODE, settings.SANDBOX_TIMEOUT_SEC, settings.SANDBOX_IMAGE
-                )
-            yield ProcessRunner(
-                store=store, llm=llm, sandbox=sandbox, settings=settings, clock=SystemClock(), tracer=tracer
-            )
-    finally:
-        provider.shutdown()
 
 
 async def _describe(runner: ProcessRunner, state: AgentProcessState) -> str:
@@ -162,7 +124,8 @@ def start(
     new_id = run_id or uuid.uuid4().hex[:12]
 
     async def go() -> str:
-        async with _runner(db, drive=True, mock=mock_llm, script=mock_script, trace_console=trace) as runner:
+        opened = open_runner(db, drive=True, mock=mock_llm, script=mock_script, trace_console=trace)
+        async with opened as runner:
             request = StartRequest(
                 target_repo_path=str(repo),
                 base_branch=base,
@@ -182,7 +145,7 @@ def status(run_id: str, db: Db = DEFAULT_DB) -> None:
     """Show a run: plan, diff, verification, counters, cost (expires overdue approvals first)."""
 
     async def go() -> str:
-        async with _runner(db, drive=False) as runner:
+        async with open_runner(db, drive=False) as runner:
             return await _describe(runner, await runner.status(run_id))
 
     typer.echo(_run(go()))
@@ -202,7 +165,8 @@ def decide(
     """Record a human decision and continue the run."""
 
     async def go() -> str:
-        async with _runner(db, drive=True, mock=mock_llm, script=mock_script, trace_console=trace) as runner:
+        opened = open_runner(db, drive=True, mock=mock_llm, script=mock_script, trace_console=trace)
+        async with opened as runner:
             request = DecisionRequest(action=action, actor=actor, comment=comment)
             return await _describe(runner, await runner.decide(run_id, request))
 
@@ -220,7 +184,8 @@ def resume(
     """Resume a run interrupted by a crash, from the step that did not complete."""
 
     async def go() -> str:
-        async with _runner(db, drive=True, mock=mock_llm, script=mock_script, trace_console=trace) as runner:
+        opened = open_runner(db, drive=True, mock=mock_llm, script=mock_script, trace_console=trace)
+        async with opened as runner:
             return await _describe(runner, await runner.resume(run_id))
 
     typer.echo(_run(go(), run_id))
@@ -231,7 +196,7 @@ def sweep(db: Db = DEFAULT_DB) -> None:
     """Expire every run whose approval deadline has passed."""
 
     async def go() -> list[str]:
-        async with _runner(db, drive=False) as runner:
+        async with open_runner(db, drive=False) as runner:
             return await runner.sweep_expired()
 
     expired = _run(go())
@@ -243,7 +208,7 @@ def runs(db: Db = DEFAULT_DB) -> None:
     """List runs with their status."""
 
     async def go() -> list[AgentProcessState]:
-        async with _runner(db, drive=False) as runner:
+        async with open_runner(db, drive=False) as runner:
             await runner.sweep_expired()
             return await runner.store.list_runs()
 

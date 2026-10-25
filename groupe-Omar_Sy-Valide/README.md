@@ -104,6 +104,19 @@ python -m src.cli credits                # consommation de la clé OpenRouter (l
 `--mock-llm --mock-script script.json` remplace OpenRouter par le faux LLM scripté (aucun appel réseau) ;
 `--trace` affiche les spans OpenTelemetry (export OTLP si `OTEL_EXPORTER_OTLP_ENDPOINT` est défini).
 
+### Tableau de bord
+
+```bash
+streamlit run src/dashboard.py
+```
+
+Liste des runs, graphe du processus tracé depuis la table de transitions (étape courante surlignée, étapes
+parcourues en bleu, issue finale en vert ou rouge), plan et diff, sortie de vérification, journal
+d'exécution, historique des décisions, coût et temps (calcul et attente humaine séparés). Les boutons
+**Approuver / Réviser / Rejeter** enregistrent la décision avec le nom de l'évaluateur ; « Approuver » est
+désactivé tant que la vérification n'a pas réussi. Chaque rafraîchissement expire les approbations
+dépassées.
+
 Modèles utilisés pour le run réel (à renseigner dans `.env`, autorisés par la clé du cours) :
 `PLANNER_MODEL=qwen/qwen3.8-flash`, `CODER_MODEL=deepseek/deepseek-v4.1-flash`,
 `SUMMARIZER_MODEL=z-ai/glm-5.3-flash`.
@@ -116,7 +129,7 @@ ruff check src tests
 pyright src      # mode strict
 ```
 
-133 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
+140 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
 
 - **9 scénarios de bout en bout** (`tests/test_scenarios.py`, SPEC §8) : nominal, rejet, expiration, reprise
   en attente d'approbation, crash au milieu d'une étape (réponse LLM rejouée depuis le cache), boucle de
@@ -124,6 +137,9 @@ pyright src      # mode strict
 - **Table de transitions** : chaque route de la spec, gardes exhaustives et exclusives, atteignabilité.
 - **Moteur, CLI, couche LLM, outils, stockage, télémétrie** : y compris la requête OpenRouter vérifiée via un
   transport HTTP simulé, et la sandbox Docker réelle (réseau coupé, montage en lecture seule).
+- **Tableau de bord** : graphe et règles d'affichage testés comme fonctions pures, puis la page Streamlit
+  elle-même pilotée sans navigateur (`AppTest`) : sélection d'un run, clic sur « Approuver », vérification
+  du merge.
 - Un test par mutation a vérifié que le scénario 5 échoue si le cache LLM est désactivé.
 
 Les tests Docker sont ignorés si l'image `mini-opencode-sandbox` n'est pas construite.
