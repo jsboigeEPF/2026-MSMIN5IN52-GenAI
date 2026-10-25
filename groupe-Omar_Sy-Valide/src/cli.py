@@ -1,5 +1,7 @@
 """Command-line interface: start, status, decide, resume, undo, sweep, report (plus runs and credits).
 
+The interactive agent is `python omar.py`; this CLI drives the same engine one command at a time.
+
     python -m src.cli start --mock-llm --mock-script script.json --repo ../demo --prompt "..."
     python -m src.cli status <run_id>
     python -m src.cli decide <run_id> --action approve --actor alice   # acts on the pending gate

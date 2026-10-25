@@ -18,6 +18,7 @@ python -m venv .venv && .venv/Scripts/python -m pip install -e ".[dev]"   # once
 pytest                         # all tests, mock LLM only
 ruff check src tests
 pyright src
+python omar.py <repo> [--mock] # the interactive agent (Textual TUI, src/tui/)
 python -m src.cli --help       # start | status | decide | resume | undo | sweep | report  (--mock-llm)
 streamlit run src/dashboard.py # Phase 5
 docker build -t mini-opencode-sandbox sandbox/   # optional, only for SANDBOX_MODE=docker

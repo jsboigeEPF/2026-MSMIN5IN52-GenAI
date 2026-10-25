@@ -1,0 +1,44 @@
+{
+  "planner": [
+    {
+      "target_file": "calc.py",
+      "steps": [
+        "Make add() return a + b instead of a - b",
+        "Make mean() raise ValueError when the list is empty",
+        "Keep the function signatures unchanged so the existing tests still apply"
+      ]
+    },
+    {
+      "target_file": "calc.py",
+      "steps": [
+        "Make add() return a + b instead of a - b",
+        "Make mean() raise ValueError when the list is empty",
+        "Keep the function signatures unchanged so the existing tests still apply",
+        "Add type hints and a docstring to each function"
+      ]
+    },
+    {
+      "target_file": "calc.py",
+      "steps": [
+        "Make add() return a + b instead of a - b",
+        "Make mean() raise ValueError when the list is empty",
+        "Keep the function signatures unchanged so the existing tests still apply",
+        "Add type hints and a docstring to each function"
+      ]
+    }
+  ],
+  "coder": [
+    {
+      "new_content": "def add(a, b):\n    return a + b\n\n\ndef mean(values):\n    if not values:\n        raise ValueError(\"mean() of an empty list\")\n    return sum(values) / len(values)\n",
+      "rationale": "Fix the operator in add() and guard mean() against empty input."
+    },
+    {
+      "new_content": "def add(a: float, b: float) -> float:\n    \"\"\"Return the sum of a and b.\"\"\"\n    return a + b\n\n\ndef mean(values: list[float]) -> float:\n    \"\"\"Return the arithmetic mean; raise ValueError on an empty list.\"\"\"\n    if not values:\n        raise ValueError(\"mean() of an empty list\")\n    return sum(values) / len(values)\n",
+      "rationale": "Same fix, with type hints and docstrings as requested."
+    },
+    {
+      "new_content": "def add(a: float, b: float) -> float:\n    \"\"\"Return the sum of a and b.\"\"\"\n    return a + b\n\n\ndef mean(values: list[float]) -> float:\n    \"\"\"Return the arithmetic mean; raise ValueError on an empty list.\"\"\"\n    if not values:\n        raise ValueError(\"mean() of an empty list\")\n    return sum(values) / len(values)\n",
+      "rationale": "Same fix, with type hints and docstrings as requested."
+    }
+  ]
+}

@@ -280,3 +280,21 @@ def test_list_files_includes_untracked_but_not_ignored_or_run_files(git_repo: Pa
     (git_repo / "new_module.py").write_text("x = 1\n")
     WorkspaceManager(git_repo, "main").create("run-1")
     assert list_files(git_repo) == [".gitignore", "calc.py", "new_module.py", "tests/test_calc.py"]
+
+
+def test_mirroring_ignores_the_users_diff_config(git_repo: Path) -> None:
+    git(git_repo, "config", "color.ui", "always")
+    git(git_repo, "config", "diff.noprefix", "true")
+    (git_repo / "calc.py").write_text(FIXED_CALC)
+    path, _ = WorkspaceManager(git_repo, "main").create("run-1")
+    assert (path / "calc.py").read_text() == FIXED_CALC
+
+
+def test_an_interrupted_mirroring_is_redone(git_repo: Path) -> None:
+    ws = WorkspaceManager(git_repo, "main")
+    path, _ = ws.create("run-1")
+    ws._mirrored_marker(path).unlink()  # pyright: ignore[reportPrivateUsage]  (simulates the crash)
+    (path / "calc.py").write_text("half-copied")
+    (git_repo / "calc.py").write_text(FIXED_CALC)
+    assert ws.create("run-1")[0] == path
+    assert (path / "calc.py").read_text() == FIXED_CALC

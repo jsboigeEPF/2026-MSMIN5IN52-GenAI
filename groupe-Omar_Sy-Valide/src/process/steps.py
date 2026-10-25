@@ -124,6 +124,7 @@ SUMMARIZER_SYSTEM = (
 )
 
 MAX_LISTED_FILES = 300
+MAX_OUTLINED_FILES = 200  # bounds the parsing work, not only the prompt size
 MAX_OUTLINE_CHARS = 12_000
 
 
@@ -184,8 +185,13 @@ class PlanStep:
             listing += f"\n... ({len(files) - MAX_LISTED_FILES} more files)"
         outlines: list[str] = []
         budget = MAX_OUTLINE_CHARS
-        for name in (f for f in files if f.endswith(".py")):
-            outline = f"# {name}\n{ctx.inspector.inspect_ast(repo / name)}"
+        for name in [f for f in files if f.endswith(".py")][:MAX_OUTLINED_FILES]:
+            if not (repo / name).is_file():
+                continue  # tracked but deleted in the working tree
+            try:
+                outline = f"# {name}\n{ctx.inspector.inspect_ast(repo / name)}"
+            except (OSError, UnicodeDecodeError):
+                continue
             if len(outline) > budget:
                 continue  # skip a large outline, keep the smaller ones that still fit
             outlines.append(outline)
@@ -286,7 +292,7 @@ class HumanApprovalStep:
         """The gate the run is waiting on, if any."""
         if state.status is not ProcessStatus.AWAITING_APPROVAL:
             return None
-        return GATES.get(Step(state.current_step))
+        return next((gate for step, gate in GATES.items() if step.value == state.current_step), None)
 
     def suspend(self, state: AgentProcessState, ctx: StepContext) -> None:
         now = ctx.clock.now()

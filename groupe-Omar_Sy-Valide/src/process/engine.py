@@ -131,7 +131,10 @@ class ProcessRunner:
     async def start(self, request: StartRequest) -> str:
         run_id = request.run_id or uuid.uuid4().hex[:12]
         repo = Path(request.target_repo_path).resolve()
-        base = request.base_branch or run_git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+        base = run_git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+        if request.base_branch is not None and request.base_branch != base:
+            # The file is tested on, and written into, the checked-out tree: no other branch makes sense.
+            raise ValueError(f"check out '{request.base_branch}' in {repo} first (found '{base}')")
         WorkspaceManager(repo, base).worktree_path(run_id)  # rejects unsafe run ids early
         if await self.store.load_state(run_id) is not None:
             raise ValueError(f"run {run_id} already exists")

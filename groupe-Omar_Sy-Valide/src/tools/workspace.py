@@ -33,18 +33,39 @@ class WorkspaceManager:
         path, branch = self.worktree_path(run_id), self.run_branch(run_id)
         self._exclude_runs_dir()
         if self._is_registered(path):
-            return path, branch
+            if self._mirrored_marker(path).exists():
+                return path, branch
+            self.discard(run_id)  # a crash interrupted the mirroring: start this worktree over
         run_git(self.repo, "worktree", "prune")
         if self._branch_exists(branch):  # left behind by a crash between branch and worktree creation
             run_git(self.repo, "worktree", "add", "-q", str(path), branch)
         else:
             run_git(self.repo, "worktree", "add", "-q", "-b", branch, str(path), self.base_branch)
         self._mirror_uncommitted_changes(path)
+        self._mirrored_marker(path).touch()
         return path, branch
 
+    @staticmethod
+    def _mirrored_marker(path: Path) -> Path:
+        """Lives in the worktree's private git dir: invisible to the tests and to `git status`."""
+        return Path(run_git(path, "rev-parse", "--absolute-git-dir")) / "omar-mirrored"
+
     def _mirror_uncommitted_changes(self, path: Path) -> None:
+        # Pinned format: the user's git config (colors, external diff, prefixes) must not change the patch.
         diff = subprocess.run(
-            ["git", "diff", "HEAD", "--binary"], cwd=self.repo, capture_output=True, check=False
+            [
+                "git",
+                "diff",
+                "HEAD",
+                "--binary",
+                "--no-color",
+                "--no-ext-diff",
+                "--src-prefix=a/",
+                "--dst-prefix=b/",
+            ],
+            cwd=self.repo,
+            capture_output=True,
+            check=False,
         )
         if diff.returncode != 0:
             raise GitError(f"git diff HEAD failed: {diff.stderr.decode(errors='replace').strip()}")

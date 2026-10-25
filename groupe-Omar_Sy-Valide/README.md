@@ -1,4 +1,4 @@
-# Mini-OpenCode — processus agentique de code avec validation humaine
+# Omar Sy Valide — agent de code interactif avec validation humaine
 
 ## Groupe
 
@@ -13,17 +13,27 @@
 - **Problématique :** comment rendre un agent de code fiable et auditable ? Le graphe d'exécution est explicite
   et déterministe (les transitions sont du code, jamais une décision de LLM), l'état est persisté à chaque étape,
   et aucune modification n'atteint la branche principale sans validation humaine explicite.
-- **MVP :** un agent qui planifie, génère un patch sur un fichier cible dans un worktree git isolé, le vérifie
-  (pytest + ruff en sandbox), le soumet à un humain (approuver / réviser / rejeter, avec expiration), puis le
-  commite ou le compense (suppression du worktree, `git revert`). Journal d'exécution SQLite, traces
-  OpenTelemetry, coût suivi par run, mode `--mock-llm` sans réseau.
+- **MVP :** un agent interactif plein écran (Textual), dans l'esprit d'OpenCode. On lui écrit une tâche, il
+  choisit le fichier à modifier et propose un plan, que l'humain valide (**Oui / Non / Affiner**). Il propose
+  ensuite un diff, validé de la même façon. Une fois le diff approuvé, le fichier est écrit dans un worktree
+  git isolé, où pytest et ruff le vérifient. Si les tests passent, le fichier est copié dans le dossier de
+  l'utilisateur, **sans commit** (`/undo` pour annuler). Journal d'exécution SQLite, traces OpenTelemetry,
+  coût suivi par run, mode `--mock` sans réseau.
 
 La spécification complète est dans [docs/SPEC.md](docs/SPEC.md).
 
 ## Architecture
 
-Graphe : `plan → code → verify → approval → finalize`, avec boucle d'auto-correction (verify → code), boucle de
-révision humaine (approval → plan) et compensation terminale. Détail dans [docs/SPEC.md](docs/SPEC.md) §5.
+Graphe : `plan → plan_approval → code → write_approval → verify → finalize`. Il comporte deux portes
+humaines et trois boucles : affiner le plan (plan_approval → plan), affiner le diff (write_approval → code)
+et l'auto-correction (verify → code, dont la correction repasse par la validation de l'écriture). Toutes les
+autres issues mènent à une compensation (suppression du worktree). Détail dans [docs/SPEC.md](docs/SPEC.md) §5.
+
+**Pourquoi plus de Docker.** Docker servait à exécuter le code généré *avant* que l'humain l'ait vu. Le diff
+est désormais validé avant toute écriture ou exécution : aucun code non relu ne tourne. Les tests sont donc
+lancés en local, dans le worktree du run, avec un environnement sans secrets (pas de clé d'API) et une
+limite de temps. Ce sont ceux du dépôt cible, c'est-à-dire ce que l'utilisateur lancerait lui-même avec
+`pytest`. `SANDBOX_MODE=docker` reste disponible pour isoler aussi le réseau et le système de fichiers.
 
 Moteur : boucle asynchrone maison pilotée par la table de transitions. Le SK Process Framework a été évalué en
 phase 0 ([docs/phase0_sk_spike.md](docs/phase0_sk_spike.md)) : suspension et reprise possibles, mais sans
@@ -32,27 +42,17 @@ utilisé pour les services LLM et les filtres de traçage.
 
 ## Installation
 
-Prérequis : Python 3.11+, git, Docker (optionnel, sandbox), Node.js (pour pyright).
+Prérequis : Python 3.11+ et git. Docker et Node.js (pour pyright) sont optionnels.
 
 ```bash
 cd groupe-Omar_Sy-Valide
 python -m venv .venv
-# Windows : .venv\Scripts\activate    —    Linux/macOS : source .venv/bin/activate
-pip install -e ".[dev]"            # versions figées dans pyproject.toml
-cp .env.example .env               # puis renseigner les valeurs localement ; ne jamais commiter .env
+.venv/bin/pip install -e ".[dev]"   # Windows : .venv\Scripts\pip ; versions figées dans pyproject.toml
+cp .env.example .env                # puis renseigner la clé et les modèles ; ne jamais commiter .env
 ```
 
-Les valeurs vides de `.env` reprennent les valeurs par défaut de `src/config.py`.
-
-Sandbox Docker (requise par défaut : `SANDBOX_MODE=auto` refuse de s'exécuter sans Docker et sans l'image,
-plutôt que de lancer le code généré sur la machine hôte) :
-
-```bash
-docker build -t mini-opencode-sandbox sandbox/   # pytest + ruff, exécuté avec --network none
-```
-
-Sans Docker, `SANDBOX_MODE=subprocess` dans `.env` exécute pytest et ruff sur l'hôte (environnement sans
-secrets, délai limité) : c'est un choix explicite, signalé par un avertissement à chaque exécution.
+Le `.env` est lu depuis ce dossier, quel que soit le dépôt où l'agent est lancé. Ses valeurs vides reprennent
+les valeurs par défaut de `src/config.py`.
 
 ### Hook de commit (chaque membre, une fois)
 
@@ -84,16 +84,35 @@ claude plugin install commit-commands@claude-plugins-official --scope project
 
 Puis `/reload-plugins` dans Claude Code (ou redémarrage).
 
-## Utilisation
-
-Depuis `groupe-Omar_Sy-Valide/`, sur un dépôt git cible dont la branche de base est extraite :
+## Lancer Omar Sy Valide
 
 ```bash
-python -m src.cli start --repo ../chemin/depot --file calc.py --prompt "Corrige add()" --scenario demo
+python omar.py ../../demo-calc          # le dépôt à modifier (défaut : dossier courant)
+python omar.py ../../demo-calc --mock   # démo sans réseau (script demo/mock-calc.json)
+```
+
+Le venv n'a pas besoin d'être activé : `omar.py` se relance de lui-même avec `.venv/`. Une fois le projet
+installé, la commande `omar` fait la même chose depuis n'importe quel dépôt.
+
+Dans l'interface :
+- écris une tâche, par exemple « corrige add() et mean() pour que les tests passent », puis Entrée ;
+- à chaque validation, **o** = Oui, **n** = Non, **a** = Affiner (tu écris ce qu'il faut changer, Entrée) ;
+- `/runs`, `/resume <id>`, `/undo`, `/repo <chemin>`, `/clear`, `/help`, `/quit` (ou Ctrl+Q).
+
+La colonne de droite suit le graphe en direct : étape courante, étapes passées, boucles, compteurs et coût.
+Chaque décision est enregistrée avec ton login comme évaluateur.
+
+## CLI (mêmes runs, une commande à la fois)
+
+Depuis `groupe-Omar_Sy-Valide/` :
+
+```bash
+python -m src.cli start --repo ../chemin/depot --prompt "Corrige add()" --scenario demo   # --file pour imposer le fichier
 python -m src.cli status <run_id>        # plan, diff, vérification, compteurs, coût
-python -m src.cli decide <run_id> --action approve --actor alice
-python -m src.cli decide <run_id> --action revise --actor alice --comment "Retire le shebang"
+python -m src.cli decide <run_id> --action approve --actor alice   # porte en attente : plan ou écriture
+python -m src.cli decide <run_id> --action revise --actor alice --comment "Garde les annotations"
 python -m src.cli decide <run_id> --action reject --actor alice
+python -m src.cli undo <run_id>          # restaure le fichier écrit par un run terminé
 python -m src.cli resume <run_id>        # reprise après un crash ou une erreur fournisseur
 python -m src.cli sweep                  # expire les approbations dépassées
 python -m src.cli runs                   # liste des runs
@@ -113,9 +132,8 @@ streamlit run src/dashboard.py
 Liste des runs, graphe du processus tracé depuis la table de transitions (étape courante surlignée, étapes
 parcourues en bleu, issue finale en vert ou rouge), plan et diff, sortie de vérification, journal
 d'exécution, historique des décisions, coût et temps (calcul et attente humaine séparés). Les boutons
-**Approuver / Réviser / Rejeter** enregistrent la décision avec le nom de l'évaluateur ; « Approuver » est
-désactivé tant que la vérification n'a pas réussi. Chaque rafraîchissement expire les approbations
-dépassées.
+**Approuver / Réviser / Rejeter** agissent sur la porte en attente (plan ou écriture) et enregistrent la
+décision avec le nom de l'évaluateur. Chaque rafraîchissement expire les approbations dépassées.
 
 Modèles utilisés pour le run réel (à renseigner dans `.env`, autorisés par la clé du cours) :
 `PLANNER_MODEL=qwen/qwen3.8-flash`, `CODER_MODEL=deepseek/deepseek-v4.1-flash`,
@@ -129,11 +147,15 @@ ruff check src tests
 pyright src      # mode strict
 ```
 
-140 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
+180 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
 
-- **9 scénarios de bout en bout** (`tests/test_scenarios.py`, SPEC §8) : nominal, rejet, expiration, reprise
-  en attente d'approbation, crash au milieu d'une étape (réponse LLM rejouée depuis le cache), boucle de
-  révision, boucle d'auto-correction, compensation post-commit (`git revert`), plafond de budget.
+- **Scénarios de bout en bout** (`tests/test_scenarios.py`, SPEC §8) : nominal (fichier choisi par l'IA),
+  rejet à chaque porte, expiration, reprise en attente de validation, crash au milieu d'une étape (réponse
+  LLM rejouée depuis le cache), affinage du plan puis du diff, auto-correction, conflit d'écriture, plafond
+  de budget.
+- **Agent interactif** (`tests/test_tui.py`) : l'interface Textual pilotée sans écran (`Pilot`). Tâche,
+  plan, Oui, diff, Oui, fichier écrit sans commit ; Affiner ; Non ; `/undo` ; `/runs` ; `/resume` ; refus
+  du dépôt de l'agent lui-même.
 - **Table de transitions** : chaque route de la spec, gardes exhaustives et exclusives, atteignabilité.
 - **Moteur, CLI, couche LLM, outils, stockage, télémétrie** : y compris la requête OpenRouter vérifiée via un
   transport HTTP simulé, et la sandbox Docker réelle (réseau coupé, montage en lecture seule).
@@ -142,7 +164,9 @@ pyright src      # mode strict
   du merge.
 - Un test par mutation a vérifié que le scénario 5 échoue si le cache LLM est désactivé.
 
-Les tests Docker sont ignorés si l'image `mini-opencode-sandbox` n'est pas construite.
+Les tests Docker sont ignorés si l'image `mini-opencode-sandbox` n'est pas construite. Avec un Docker
+installé via snap, ils échouent (déjà le cas avant ce changement) : le confinement snap ne voit pas le `/tmp`
+de l'hôte, où pytest crée ses dépôts de test.
 
 ## Résultats et évaluation
 
@@ -163,17 +187,19 @@ une mesure statistique : les chiffres de taux de complétion sont à compléter 
 
 ## Limites et plan B
 
-- **Un seul fichier cible par run**, et la branche de base doit être extraite dans le dépôt de l'utilisateur
-  (sinon le run se termine en `commit_failed`, sans changer de branche à sa place).
-- **`MAX_FIX` couvre tout le run** : il n'est pas remis à zéro après une révision humaine.
+- **Un seul fichier cible par run**, choisi par l'IA (ou imposé avec `--file` en CLI).
+- **Pas de commit** : le fichier est écrit dans le dossier de travail, et le commit reste à la main de
+  l'utilisateur. Si le fichier est modifié pendant le run, rien n'est écrasé (`write_failed`).
+- **`MAX_FIX` couvre tout le run** : il n'est pas remis à zéro après une révision humaine. `MAX_REVISIONS`
+  (5 par défaut) est partagé par les deux portes.
 - **Modèles limités par la clé du cours** (8 modèles autorisés) ; un modèle refusé laisse le run reprenable.
-- **Sandbox** : Docker requis par défaut ; `SANDBOX_MODE=subprocess` exécute le code généré sur l'hôte et
-  n'est qu'un choix explicite (avertissement à chaque exécution).
+- **Exécution locale par défaut** : seul du code relu et approuvé tourne, mais sans isolation réseau ni
+  disque. `SANDBOX_MODE=docker` ajoute cette isolation.
 - **Tableau de bord sans authentification** : outil local mono-utilisateur. `.streamlit/config.toml` le limite
   à `127.0.0.1` ; le nom de l'évaluateur est déclaratif. Il ne doit pas être exposé sur un réseau sans un
   proxy authentifiant devant lui. Les textes issus du LLM et des outils sont affichés échappés (pas de
   Markdown actif, donc pas d'image ni de lien injectés).
-- **Plan B de démonstration** : mode `--mock-llm` (aucun appel réseau, comportement déterministe).
+- **Plan B de démonstration** : `python omar.py <dépôt> --mock` (aucun appel réseau, comportement déterministe).
 
 ## Répartition du travail
 

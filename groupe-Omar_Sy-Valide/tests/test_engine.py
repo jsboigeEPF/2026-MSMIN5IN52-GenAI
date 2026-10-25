@@ -396,3 +396,24 @@ async def test_stale_feedback_is_not_resent(git_repo: Path, make_runner: RunnerF
     await runner.decide(run_id, approve())
     coder_prompt = [r for r in fake.requests if r.service_id == "coder"][0].user
     assert "use a dict" not in coder_prompt
+
+
+async def test_planner_overview_survives_deleted_and_binary_python_files(
+    git_repo: Path, make_runner: RunnerFactory
+) -> None:
+    (git_repo / "old.py").write_text("x = 1\n")
+    (git_repo / "latin1.py").write_bytes(b"s = '\xe9'\n")
+    git(git_repo, "add", "old.py", "latin1.py")
+    git(git_repo, "commit", "-q", "-m", "more files")
+    (git_repo / "old.py").unlink()  # tracked, deleted in the working tree
+    fake = FakeLLM({"planner": [PLAN]})
+    state = await make_runner(fake).status(await make_runner(fake).start(start_request(git_repo, None)))
+    assert state.current_step == "plan_approval"
+
+
+async def test_starting_on_another_branch_than_the_checked_out_one_is_refused(
+    git_repo: Path, make_runner: RunnerFactory
+) -> None:
+    request = start_request(git_repo).model_copy(update={"base_branch": "release"})
+    with pytest.raises(ValueError, match="check out 'release'"):
+        await make_runner(FakeLLM({})).start(request)

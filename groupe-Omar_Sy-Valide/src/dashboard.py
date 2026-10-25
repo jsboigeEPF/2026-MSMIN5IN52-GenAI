@@ -278,7 +278,7 @@ def main() -> None:
     if flash := st.session_state.pop("flash", None):
         st.success(flash)
     if not db.exists():
-        st.info(f"No database at {md_escape(str(db))}. Start a run with `python -m src.cli start ...` first.")
+        st.info(f"No database at {md_escape(str(db))}. Start a run with `python omar.py` first.")
         return
     runs = asyncio.run(load_runs(db))
     if not runs:

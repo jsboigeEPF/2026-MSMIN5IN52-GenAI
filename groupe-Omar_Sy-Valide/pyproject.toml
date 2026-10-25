@@ -19,13 +19,17 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http==1.45.1",
     "typer==0.27.3",
     "streamlit==1.66.1",
+    "textual==8.2.8",
+    "pytest==9.1.1",  # runs the target repository's tests in the verify step
+    "ruff==0.17.2",  # lints the approved file in the verify step
 ]
+
+[project.scripts]
+omar = "src.tui.app:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
-    "ruff==0.17.2",
     "pyright==1.1.414",
 ]
 
