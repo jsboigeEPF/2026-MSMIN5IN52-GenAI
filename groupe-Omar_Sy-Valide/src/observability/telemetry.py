@@ -169,7 +169,8 @@ async def generate_evaluation_report(
     completion: dict[str, ScenarioCompletion] = {}
     for scenario in sorted({r.scenario or "unlabeled" for r in runs}):
         group = [r for r in runs if (r.scenario or "unlabeled") == scenario]
-        done = sum(r.status is ProcessStatus.COMPLETED for r in group)
+        # "written_despite_failing_tests" is COMPLETED but not a success.
+        done = sum(r.status is ProcessStatus.COMPLETED and r.terminal_reason is None for r in group)
         completion[scenario] = ScenarioCompletion(runs=len(group), completed=done, rate=done / len(group))
 
     by_step: defaultdict[str, list[float]] = defaultdict(list)

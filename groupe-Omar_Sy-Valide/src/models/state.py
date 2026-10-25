@@ -91,7 +91,7 @@ Gate = Literal["plan", "write"]
 
 class ApprovalDecision(BaseModel):  # append-only audit record
     gate: Gate
-    action: Literal["approve", "revise", "reject"]
+    action: Literal["approve", "revise", "reject", "write_anyway"]
     actor: str
     comment: str | None = None
     decided_at: datetime

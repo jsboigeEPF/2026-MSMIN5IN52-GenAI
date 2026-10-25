@@ -221,5 +221,6 @@ async def test_after_the_fixes_run_out_oui_means_write_anyway(
         await pilot.press("o")
         await settle(app, pilot)
         assert app.state is not None and app.state.terminal_reason == "written_despite_failing_tests"
+        assert "> Écrire quand même" in transcript(app)
         assert "alors que les tests échouent" in transcript(app)
     assert (git_repo / "calc.py").read_text() == bad["new_content"]

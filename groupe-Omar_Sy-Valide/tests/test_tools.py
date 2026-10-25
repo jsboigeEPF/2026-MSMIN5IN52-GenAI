@@ -302,8 +302,11 @@ def test_an_interrupted_mirroring_is_redone(git_repo: Path) -> None:
 
 async def test_a_repository_without_tests_passes(tmp_path: Path) -> None:
     (tmp_path / "app.py").write_text("x = 1\n")
-    passed, output = await subprocess_runner().run_pytest(tmp_path)
+    passed, output = await subprocess_runner().run_pytest(tmp_path, allow_no_tests=True)
     assert passed and "no tests in the repository" in output
+    assert not (await subprocess_runner().run_pytest(tmp_path))[
+        0
+    ]  # a repository that had tests and lost them
 
 
 async def test_linter_only_counts_violations_the_change_introduces(git_repo: Path) -> None:
@@ -318,3 +321,9 @@ async def test_linter_only_counts_violations_the_change_introduces(git_repo: Pat
     (git_repo / "app.py").write_text(original + "import sys\n")
     passed, output = await subprocess_runner().run_linter(git_repo, "app.py", baseline=original)
     assert not passed and "app.py:5:8: F401" in output and "RUF100" not in output
+
+    # Same rule as a pre-existing violation, different symbol: still new.
+    legacy = "print(undefined_a)\n"
+    (git_repo / "app.py").write_text("print(undefined_b)\n")
+    passed, output = await subprocess_runner().run_linter(git_repo, "app.py", baseline=legacy)
+    assert not passed and "undefined_b" in output

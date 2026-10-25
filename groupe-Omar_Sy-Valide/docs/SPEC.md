@@ -171,8 +171,8 @@ plan ──PlanCreated──▶ plan_approval
 plan_approval ──Approved──▶ code
 plan_approval ──RevisionRequested [revision_iteration < MAX_REVISIONS]──▶ plan   (human_feedback injected)
 code ──CodeGenerated──▶ write_approval            (diff computed, nothing written)
-write_approval ──Approved [fix_iteration ≤ MAX_FIX]──▶ verify
-write_approval ──Approved [fix_iteration > MAX_FIX]──▶ finalize   ("write anyway": the code shown is the one that failed)
+write_approval ──Approved──▶ verify                (approve always means "write in the worktree and test")
+write_approval ──WriteAnywayRequested──▶ finalize  (own decision, accepted only once fixes ran out: the code shown is the one that failed)
 write_approval ──RevisionRequested [revision_iteration < MAX_REVISIONS]──▶ code  (human_feedback injected)
 <either gate> ──RevisionRequested [revision_iteration ≥ MAX_REVISIONS]──▶ compensate (REJECTED, "max_iterations")
 <either gate> ──Rejected──▶ compensate (REJECTED, "human_rejected")
@@ -216,7 +216,7 @@ Both gates: set `AWAITING_APPROVAL` and `approval_deadline = clock.now() + APPRO
 
 **Step 3 – `VerificationStep`** (tools + `summarizer`)
 - Writes the approved content into the worktree, then runs `run_pytest` and `run_linter` concurrently (`asyncio.gather`).
-- pytest exit code 5 (no tests collected) counts as a pass. Ruff runs with the target repository's configuration and fails only on violations the change introduces (baseline: the original content, linted through stdin under the same path).
+- pytest exit code 5 (no tests collected) counts as a pass only if the user's repository has no test file at all. Ruff runs with the target repository's configuration and fails only on violations the change introduces (baseline: the original content, linted through stdin under the same path; matched on rule and message).
 - On failure: `summarizer` condenses the output (in mock mode: deterministic truncation), increments `fix_iteration`. A human "refine" resets `fix_iteration` (fresh budget of `MAX_FIX` = 10 automatic fixes).
 - Emits `VerificationPassed` or `VerificationFailed` (routing per table).
 

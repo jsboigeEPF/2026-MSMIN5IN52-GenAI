@@ -39,6 +39,7 @@ class Event(StrEnum):
     APPROVED = "Approved"
     REVISION_REQUESTED = "RevisionRequested"
     REJECTED = "Rejected"
+    WRITE_ANYWAY_REQUESTED = "WriteAnywayRequested"
     EXPIRED = "Expired"
     WRITTEN = "Written"
     WRITE_FAILED = "WriteFailed"
@@ -149,18 +150,12 @@ TRANSITIONS: tuple[Transition, ...] = (
         Step.WRITE_APPROVAL,
         approved=(
             Transition(
-                Step.WRITE_APPROVAL,
-                Event.APPROVED,
-                Step.VERIFY,
-                "approved: write in the worktree and test",
-                _fix_left,
+                Step.WRITE_APPROVAL, Event.APPROVED, Step.VERIFY, "approved: write in the worktree and test"
             ),
+            # Its own decision, accepted only once the fixes ran out (HumanApprovalStep.validate):
+            # "approve" never means "skip the tests".
             Transition(
-                Step.WRITE_APPROVAL,
-                Event.APPROVED,
-                Step.FINALIZE,
-                "write anyway (tests still fail)",
-                fixes_exhausted,
+                Step.WRITE_APPROVAL, Event.WRITE_ANYWAY_REQUESTED, Step.FINALIZE, "write anyway (tests fail)"
             ),
         ),
         revised=Step.CODE,

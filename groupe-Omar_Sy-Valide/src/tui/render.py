@@ -11,7 +11,8 @@ from rich.syntax import Syntax
 from rich.text import Text
 
 from src.models.state import AgentProcessState, ProcessStatus, VerificationResult
-from src.process.graph import GATES, TRANSITIONS, Limits, Step, fixes_exhausted
+from src.process.graph import GATES, TRANSITIONS, Limits, Step
+from src.process.steps import HumanApprovalStep
 from src.safe_text import printable
 
 STEP_LABELS = {
@@ -28,13 +29,8 @@ GATE_QUESTIONS = {
 }
 
 
-def write_anyway(state: AgentProcessState, limits: Limits) -> bool:
-    """At the write gate after the automatic fixes ran out: "Oui" writes the failing code as is."""
-    return state.current_step == Step.WRITE_APPROVAL and fixes_exhausted(state, limits)
-
-
 def gate_question(state: AgentProcessState, limits: Limits) -> Text:
-    if write_anyway(state, limits):
+    if HumanApprovalStep.write_anyway_allowed(state, limits):
         return Text(
             f"Les tests échouent encore après {limits.max_fix} corrections automatiques. "
             "Écrire quand même, affiner (a) ou abandonner (n) ?",
@@ -48,7 +44,7 @@ TERMINAL_REASONS = {
     "human_rejected": "refusé",
     "max_iterations": "trop de demandes d'affinage",
     "approval_expired": "validation expirée",
-    "fixes_exhausted": "les tests échouent encore après les corrections automatiques",
+    "fixes_exhausted": "les tests échouent encore après les corrections automatiques",  # runs before v2
     "write_failed": "écriture refusée",
     "budget_exceeded": "budget dépassé",
     "invalid_llm_output": "réponse du modèle invalide",

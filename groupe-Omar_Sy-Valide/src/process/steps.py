@@ -27,7 +27,7 @@ from src.models.state import (
     ProcessStatus,
     VerificationResult,
 )
-from src.process.graph import GATES, Event, Step
+from src.process.graph import GATES, Event, Limits, Step, fixes_exhausted
 from src.tools.git_ops import list_files
 from src.tools.inspector import CodeInspector
 from src.tools.patch import PatchEngine
@@ -94,6 +94,15 @@ def _target(state: AgentProcessState) -> str:
 def _read_text(path: Path) -> str:
     """Current content of a user file; "" when it does not exist yet (the planner may create a file)."""
     return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+
+def _has_tests(state: AgentProcessState) -> bool:
+    """Whether the user's repository has test files: then "no tests collected" is a failure, not a pass."""
+    for name in list_files(Path(state.target_repo_path)):
+        base = name.rsplit("/", 1)[-1]
+        if base.endswith(".py") and (base.startswith("test_") or base.endswith("_test.py")):
+            return True
+    return False
 
 
 def _holds(path: Path, content: str) -> bool:
@@ -243,7 +252,7 @@ class VerificationStep:
         worktree, target = _worktree(state), _target(state)
         ctx.patch.apply(worktree, target, state.generated_code or "")
         (pytest_ok, pytest_out), (lint_ok, lint_out) = await asyncio.gather(
-            ctx.require_sandbox().run_pytest(worktree),
+            ctx.require_sandbox().run_pytest(worktree, allow_no_tests=not _has_tests(state)),
             ctx.require_sandbox().run_linter(worktree, target, baseline=state.original_file_content),
         )
         usage, summary = LLMUsage(), None
@@ -273,7 +282,7 @@ class VerificationStep:
 
 
 class DecisionRequest(BaseModel):
-    action: Literal["approve", "revise", "reject"]
+    action: Literal["approve", "revise", "reject", "write_anyway"]
     actor: str = Field(min_length=1)
     comment: str | None = None
 
@@ -285,7 +294,12 @@ class DecisionRefusedError(RuntimeError):
 class HumanApprovalStep:
     """Both gates (plan, write): suspends the run; a decision (or the expiry sweep) produces its event."""
 
-    _EVENTS = {"approve": Event.APPROVED, "revise": Event.REVISION_REQUESTED, "reject": Event.REJECTED}
+    _EVENTS = {
+        "approve": Event.APPROVED,
+        "revise": Event.REVISION_REQUESTED,
+        "reject": Event.REJECTED,
+        "write_anyway": Event.WRITE_ANYWAY_REQUESTED,
+    }
 
     @staticmethod
     def gate(state: AgentProcessState) -> Gate | None:
@@ -294,13 +308,20 @@ class HumanApprovalStep:
             return None
         return next((gate for step, gate in GATES.items() if step.value == state.current_step), None)
 
+    @classmethod
+    def write_anyway_allowed(cls, state: AgentProcessState, limits: Limits) -> bool:
+        """At the write gate once the automatic fixes ran out: the code shown is the one that failed."""
+        return cls.gate(state) == "write" and fixes_exhausted(state, limits)
+
     def suspend(self, state: AgentProcessState, ctx: StepContext) -> None:
         now = ctx.clock.now()
         state.status = ProcessStatus.AWAITING_APPROVAL
         state.awaiting_since = now
         state.approval_deadline = now + timedelta(seconds=ctx.settings.APPROVAL_TIMEOUT_SEC)
 
-    def validate(self, state: AgentProcessState, decision: DecisionRequest, now: datetime) -> Gate:
+    def validate(
+        self, state: AgentProcessState, decision: DecisionRequest, now: datetime, limits: Limits
+    ) -> Gate:
         gate = self.gate(state)
         if gate is None:
             raise DecisionRefusedError(f"run {state.run_id} is {state.status.value}, not awaiting approval")
@@ -308,14 +329,19 @@ class HumanApprovalStep:
             raise DecisionRefusedError(f"run {state.run_id}: the approval deadline has passed")
         if decision.action == "revise" and not (decision.comment and decision.comment.strip()):
             raise DecisionRefusedError("revise needs a comment telling the agent what to change")
+        if decision.action == "write_anyway" and not self.write_anyway_allowed(state, limits):
+            raise DecisionRefusedError("write_anyway is only possible once the automatic fixes ran out")
         return gate
 
-    def apply(self, state: AgentProcessState, decision: ApprovalDecision) -> Event:
+    def apply(self, state: AgentProcessState, decision: ApprovalDecision, limits: Limits) -> Event:
         if decision.action == "revise":
             state.revision_iteration += 1
             state.human_feedback = decision.comment
-            state.verification = None  # a human revision starts a fresh attempt...
-            state.fix_iteration = 0  # ...with a fresh budget of automatic fixes
+            if not self.write_anyway_allowed(state, limits):
+                # The failure belongs to older code than the one shown: a fresh attempt. After the fixes
+                # ran out, the shown code is the one that failed, and the coder needs that error.
+                state.verification = None
+            state.fix_iteration = 0  # a fresh budget of automatic fixes
         return self._EVENTS[decision.action]
 
 

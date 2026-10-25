@@ -42,7 +42,6 @@ _ENV_ALLOWLIST = (
 )
 _MAX_OUTPUT_CHARS = 20_000
 _PYTEST_ARGS = ("-m", "pytest", "-q", "-p", "no:cacheprovider")
-_PYTEST_OK = (0, 5)  # 5 = no tests collected: a repository without tests has nothing to fail
 # EXE001/EXE002 check the executable bit, which the agent neither generates nor commits, and which
 # Docker Desktop bind mounts report as set on every file.
 _RUFF_ARGS = ("check", "--no-cache", "--extend-ignore", "EXE001,EXE002", "--output-format", "json")
@@ -72,6 +71,14 @@ def _violations(result: _Result) -> list[dict[str, Any]] | None:
 
 def _code(violation: dict[str, Any]) -> str:
     return str(violation.get("code") or "syntax-error")
+
+
+def _key(violation: dict[str, Any]) -> tuple[str, str]:
+    return _code(violation), str(violation.get("message", ""))
+
+
+async def _no_baseline() -> _Result:
+    return _Result(0, "[]", "")
 
 
 def _describe(file: str, violation: dict[str, Any]) -> str:
@@ -107,14 +114,16 @@ class SandboxRunner:
         self.timeout_sec = timeout_sec
         self.image = image
 
-    async def run_pytest(self, worktree_path: Path) -> tuple[bool, str]:
+    async def run_pytest(self, worktree_path: Path, allow_no_tests: bool = False) -> tuple[bool, str]:
+        """`allow_no_tests`: pytest exit code 5 (nothing collected) passes, for a repository that has no
+        tests at all. Off by default, so a change that loses every test does not pass by accident."""
         if self.mode == "docker":
             result = await self._run_docker(worktree_path, ["python", *_PYTEST_ARGS])
         else:
             result = await self._run([sys.executable, *_PYTEST_ARGS], cwd=worktree_path, env=_sandbox_env())
-        if result.code == 5:
+        if result.code == 5 and allow_no_tests:
             return True, result.text + "\n(no tests in the repository: nothing to run)"
-        return result.code in _PYTEST_OK, result.text
+        return result.code == 0, result.text
 
     async def run_linter(
         self, worktree_path: Path, file: str, baseline: str | None = None
@@ -122,21 +131,20 @@ class SandboxRunner:
         """Ruff with the target repository's own configuration. With `baseline` (the file before the run),
         only violations the change introduces count: the agent is not blamed for code it did not write."""
         target = str(PurePosixPath(Path(file).as_posix()))
-        after_run = await self._ruff(worktree_path, [target])
+        stdin_args = ["--stdin-filename", target, "-"]
+        after_run, before_run = await asyncio.gather(
+            self._ruff(worktree_path, [target]),
+            self._ruff(worktree_path, stdin_args, baseline) if baseline is not None else _no_baseline(),
+        )
         after = _violations(after_run)
         if after is None:
             return False, after_run.text or f"ruff failed (exit code {after_run.code})"
-        before: list[dict[str, Any]] = []
-        if baseline is not None:
-            before = (
-                _violations(await self._ruff(worktree_path, ["--stdin-filename", target, "-"], baseline))
-                or []
-            )
-        remaining = Counter(_code(v) for v in before)
+        # Matched on rule and message (which names the symbol), not line numbers: the change moves lines.
+        remaining = Counter(_key(v) for v in _violations(before_run) or [])
         new: list[dict[str, Any]] = []
         for violation in after:
-            if remaining[_code(violation)] > 0:
-                remaining[_code(violation)] -= 1
+            if remaining[_key(violation)] > 0:
+                remaining[_key(violation)] -= 1
             else:
                 new.append(violation)
         lines = [_describe(target, v) for v in new]

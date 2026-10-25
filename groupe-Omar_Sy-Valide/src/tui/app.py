@@ -39,7 +39,7 @@ from src.tools.git_ops import GitError, run_git
 from src.tools.sandbox import SandboxUnavailableError
 from src.tui import render
 
-Action = Literal["approve", "revise", "reject"]
+Action = Literal["approve", "revise", "reject", "write_anyway"]
 
 # Errors the user can act on: shown in one line, the session goes on.
 EXPECTED_ERRORS = (
@@ -210,18 +210,24 @@ class OmarApp(App[None]):
     def show_gate(self, gate: str | None) -> None:
         bar = self.query_one("#gate")
         bar.set_class(gate is not None, "visible")
-        if gate is not None and self.state is not None and self.runner is not None:
-            self.query_one("#gate-question", Static).update(
-                render.gate_question(self.state, self.runner.limits)
+        if gate is None:
+            self.query_one("#prompt", Input).focus()
+        else:
+            anyway = self.write_anyway_pending()
+            question = (
+                render.gate_question(self.state, self.runner.limits) if self.state and self.runner else ""
             )
-            anyway = render.write_anyway(self.state, self.runner.limits)
+            self.query_one("#gate-question", Static).update(question)
             approve = self.query_one("#approve", Button)
             approve.label = "Écrire quand même (o)" if anyway else "Oui (o)"
             approve.variant = "warning" if anyway else "success"
             approve.focus()
-        else:
-            self.query_one("#prompt", Input).focus()
         self.refresh_bindings()
+
+    def write_anyway_pending(self) -> bool:
+        if self.state is None or self.runner is None:
+            return False
+        return HumanApprovalStep.write_anyway_allowed(self.state, self.runner.limits)
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if action in ("decide", "refine"):
@@ -281,7 +287,10 @@ class OmarApp(App[None]):
     def action_decide(self, action: str) -> None:
         if self.pending_gate() is None or self.busy:
             return
-        self.decide("approve" if action == "approve" else "reject")
+        if action == "approve":
+            self.decide("write_anyway" if self.write_anyway_pending() else "approve")
+        else:
+            self.decide("reject")
 
     def action_refine(self) -> None:
         if self.pending_gate() is None or self.busy:
@@ -323,7 +332,12 @@ class OmarApp(App[None]):
     def decide(self, action: Action, comment: str | None = None) -> None:
         if self.runner is None or self.state is None:
             return
-        labels = {"approve": "Oui", "reject": "Non", "revise": f"Affiner : {comment}"}
+        labels = {
+            "approve": "Oui",
+            "write_anyway": "Écrire quand même",
+            "reject": "Non",
+            "revise": f"Affiner : {comment}",
+        }
         self.say(Text(f"> {printable(labels[action])}", style="bold cyan"))
         request = DecisionRequest(action=action, actor=self.actor, comment=comment)
         runner, run_id = self.runner, self.state.run_id

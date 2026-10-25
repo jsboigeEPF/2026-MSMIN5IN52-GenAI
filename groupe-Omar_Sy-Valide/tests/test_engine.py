@@ -183,7 +183,7 @@ async def test_exhausted_fixes_hand_the_failing_code_back_to_the_human(
     assert not state.verification.pytest_passed
     assert (git_repo / "calc.py").read_text() == BUGGY_CALC
 
-    state = await runner.decide(run_id, approve())  # "write anyway"
+    state = await runner.decide(run_id, DecisionRequest(action="write_anyway", actor="alice"))
     assert (state.status, state.terminal_reason) == (ProcessStatus.COMPLETED, "written_despite_failing_tests")
     assert (git_repo / "calc.py").read_text() == BAD_PATCH.new_content
 
@@ -200,6 +200,10 @@ async def test_refining_after_exhaustion_gives_a_fresh_fix_budget(
 
     state = await runner.decide(run_id, DecisionRequest(action="revise", actor="a", comment="use +"))
     assert state.current_step == "write_approval" and state.fix_iteration == 0
+    coder_prompt = [r for r in fake.requests if r.service_id == "coder"][-1].user
+    assert "It failed verification" in coder_prompt and "use +" in coder_prompt  # the error is kept
+    with pytest.raises(DecisionRefusedError, match="write_anyway"):  # new code: no shortcut past the tests
+        await runner.decide(run_id, DecisionRequest(action="write_anyway", actor="a"))
     state = await runner.decide(run_id, approve())  # new code: tested, not written blindly
     assert (state.status, state.terminal_reason) == (ProcessStatus.COMPLETED, None)
     assert state.verification is not None and state.verification.pytest_passed

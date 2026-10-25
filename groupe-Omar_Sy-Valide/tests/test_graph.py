@@ -3,7 +3,7 @@ from itertools import product
 import pytest
 
 from src.models.state import ProcessStatus, VerificationResult
-from src.process.graph import TRANSITIONS, Event, Limits, Step, Terminal, fixes_exhausted, next_transition
+from src.process.graph import TRANSITIONS, Event, Limits, Step, Terminal, next_transition
 from tests.conftest import StateFactory
 
 LIMITS = Limits(max_fix=2, max_revisions=2)
@@ -25,7 +25,8 @@ EXPIRED = Terminal(ProcessStatus.EXPIRED, "approval_expired", "discard_worktree"
         (Step.PLAN_APPROVAL, Event.EXPIRED, 0, 0, EXPIRED),
         (Step.CODE, Event.CODE_GENERATED, 0, 0, Step.WRITE_APPROVAL),
         (Step.WRITE_APPROVAL, Event.APPROVED, 0, 0, Step.VERIFY),
-        (Step.WRITE_APPROVAL, Event.APPROVED, 3, 0, Step.FINALIZE),  # fixes used up: write anyway
+        (Step.WRITE_APPROVAL, Event.APPROVED, 3, 0, Step.VERIFY),  # approve always means "test it"
+        (Step.WRITE_APPROVAL, Event.WRITE_ANYWAY_REQUESTED, 3, 0, Step.FINALIZE),
         (Step.WRITE_APPROVAL, Event.REVISION_REQUESTED, 0, 1, Step.CODE),
         (Step.WRITE_APPROVAL, Event.REVISION_REQUESTED, 0, 3, EXHAUSTED),
         (Step.WRITE_APPROVAL, Event.REJECTED, 0, 0, REJECTED),
@@ -114,7 +115,7 @@ def test_no_code_runs_before_the_write_gate() -> None:
     }
     # The only way to finalize without passing tests is a human "write anyway" after the fixes ran out.
     shortcuts = [t for t in TRANSITIONS if t.target == Step.FINALIZE and t.source != Step.VERIFY]
-    assert [(t.source, t.guard) for t in shortcuts] == [(Step.WRITE_APPROVAL, fixes_exhausted)]
+    assert [(t.source, t.event) for t in shortcuts] == [(Step.WRITE_APPROVAL, Event.WRITE_ANYWAY_REQUESTED)]
 
 
 def test_every_event_is_used_and_every_transition_is_labelled() -> None:

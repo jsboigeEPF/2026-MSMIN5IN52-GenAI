@@ -27,7 +27,6 @@ from src.llm.fake import FakeScriptExhaustedError
 from src.models.state import AgentProcessState
 from src.observability.telemetry import generate_evaluation_report
 from src.process.engine import DecisionRefusedError, DecisionRequest, ProcessRunner, StartRequest
-from src.process.graph import fixes_exhausted
 from src.process.steps import HumanApprovalStep
 from src.runtime import open_runner
 from src.safe_text import printable
@@ -89,10 +88,10 @@ async def _describe(runner: ProcessRunner, state: AgentProcessState) -> str:
     gate = HumanApprovalStep.gate(state)
     if gate is not None:
         lines.append(f"awaiting the {gate} gate: approve, revise (with a comment) or reject")
-        if gate == "write" and fixes_exhausted(state, runner.limits):
+        if HumanApprovalStep.write_anyway_allowed(state, runner.limits):
             lines.append(
-                f"WARNING: tests still fail after {runner.limits.max_fix} automatic fixes; "
-                "approve writes this failing code as is"
+                f"WARNING: tests still fail after {runner.limits.max_fix} automatic fixes: revise, reject, "
+                "or --action write_anyway to write this failing code as is"
             )
         if state.approval_deadline is not None:
             lines.append(f"approval deadline: {state.approval_deadline.isoformat()}")
@@ -170,7 +169,10 @@ def status(run_id: str, db: Db = DEFAULT_DB) -> None:
 @app.command()
 def decide(
     run_id: str,
-    action: Annotated[Literal["approve", "revise", "reject"], typer.Option(help="The decision.")],
+    action: Annotated[
+        Literal["approve", "revise", "reject", "write_anyway"],
+        typer.Option(help="The decision (write_anyway: only once the automatic fixes ran out)."),
+    ],
     actor: Annotated[str, typer.Option(help="Who decides (stored in the audit log).")],
     comment: Annotated[str | None, typer.Option(help="Required for revise.")] = None,
     db: Db = DEFAULT_DB,

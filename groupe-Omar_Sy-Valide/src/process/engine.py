@@ -173,7 +173,7 @@ class ProcessRunner:
         await self.sweep_expired()
         state = await self._load(run_id)
         now = self.clock.now()
-        gate = self.approval.validate(state, request, now)
+        gate = self.approval.validate(state, request, now, self.limits)
         step = Step(state.current_step)
         decision = ApprovalDecision(
             gate=gate,
@@ -185,7 +185,7 @@ class ProcessRunner:
         )
         await self.store.append_approval(run_id, decision)
         with run_span(self.tracer, run_id):
-            event = self.approval.apply(state, decision)
+            event = self.approval.apply(state, decision, self.limits)
             await self._close_approval(state, step, decision, now)
             if await self._follow(state, step, event, state.loop_iteration):
                 await self._drive(state)

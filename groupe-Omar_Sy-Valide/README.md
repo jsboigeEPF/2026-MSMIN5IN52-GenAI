@@ -31,7 +31,8 @@ et l'auto-correction (verify → code, dont la correction repasse par la validat
 essais), abandonner, ou écrire quand même (issue `written_despite_failing_tests`). Toutes les autres issues
 mènent à une compensation (suppression du worktree).
 
-**Vérification juste.** Un dépôt sans tests passe (« aucun test »). ruff applique la configuration du projet
+**Vérification juste.** Un dépôt qui n'a aucun fichier de test passe (« aucun test ») ; un dépôt qui en avait et n'en collecte plus
+échoue. ruff applique la configuration du projet
 cible, mais seules les violations introduites par le changement comptent : l'IA n'est pas pénalisée pour du
 code qui existait avant. Détail dans [docs/SPEC.md](docs/SPEC.md) §5.
 
@@ -123,6 +124,7 @@ python -m src.cli status <run_id>        # plan, diff, vérification, compteurs,
 python -m src.cli decide <run_id> --action approve --actor alice   # porte en attente : plan ou écriture
 python -m src.cli decide <run_id> --action revise --actor alice --comment "Garde les annotations"
 python -m src.cli decide <run_id> --action reject --actor alice
+python -m src.cli decide <run_id> --action write_anyway --actor alice   # seulement après 10 corrections ratées
 python -m src.cli undo <run_id>          # restaure le fichier écrit par un run terminé
 python -m src.cli resume <run_id>        # reprise après un crash ou une erreur fournisseur
 python -m src.cli sweep                  # expire les approbations dépassées
@@ -158,7 +160,7 @@ ruff check src tests
 pyright src      # mode strict
 ```
 
-188 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
+189 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
 
 - **Scénarios de bout en bout** (`tests/test_scenarios.py`, SPEC §8) : nominal (fichier choisi par l'IA),
   rejet à chaque porte, expiration, reprise en attente de validation, crash au milieu d'une étape (réponse
