@@ -44,11 +44,15 @@ cp .env.example .env               # puis renseigner les valeurs localement ; ne
 
 Les valeurs vides de `.env` reprennent les valeurs par défaut de `src/config.py`.
 
-Sandbox Docker (optionnelle ; sans elle, `SANDBOX_MODE=auto` utilise un sous-processus sans variables secrètes) :
+Sandbox Docker (requise par défaut : `SANDBOX_MODE=auto` refuse de s'exécuter sans Docker et sans l'image,
+plutôt que de lancer le code généré sur la machine hôte) :
 
 ```bash
 docker build -t mini-opencode-sandbox sandbox/   # pytest + ruff, exécuté avec --network none
 ```
+
+Sans Docker, `SANDBOX_MODE=subprocess` dans `.env` exécute pytest et ruff sur l'hôte (environnement sans
+secrets, délai limité) : c'est un choix explicite, signalé par un avertissement à chaque exécution.
 
 ### Hook de commit (chaque membre, une fois)
 

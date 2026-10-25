@@ -1,6 +1,11 @@
-"""Run pytest and ruff on a worktree, isolated from the host (SPEC §4.4)."""
+"""Run pytest and ruff on a worktree, isolated from the host (SPEC §4.4).
+
+Fails closed: `auto` never silently downgrades to running generated code on the host. Host execution
+needs an explicit SANDBOX_MODE=subprocess and is logged as a warning on every run.
+"""
 
 import asyncio
+import logging
 import os
 import shutil
 import subprocess
@@ -10,6 +15,14 @@ from pathlib import Path, PurePosixPath
 from typing import Literal
 
 SandboxMode = Literal["docker", "subprocess"]
+
+logger = logging.getLogger(__name__)
+_HOST_WARNING = "SANDBOX_MODE=subprocess: generated code runs on the host without isolation"
+
+
+class SandboxUnavailableError(RuntimeError):
+    pass
+
 
 # The only host variables a subprocess-mode run inherits: no API keys, tokens or credentials.
 _ENV_ALLOWLIST = (
@@ -48,21 +61,31 @@ def _sandbox_env() -> dict[str, str]:
 
 class SandboxRunner:
     def __init__(self, mode: Literal["auto", "docker", "subprocess"], timeout_sec: int, image: str) -> None:
-        self.mode: SandboxMode = (
-            ("docker" if docker_available(image) else "subprocess") if mode == "auto" else mode
-        )
+        if mode == "auto":
+            if not docker_available(image):
+                raise SandboxUnavailableError(
+                    f"SANDBOX_MODE=auto needs Docker and the image '{image}' "
+                    "(docker build -t mini-opencode-sandbox sandbox/). To run generated code on the host "
+                    "instead, set SANDBOX_MODE=subprocess explicitly."
+                )
+            mode = "docker"
+        self.mode: SandboxMode = mode
+        if self.mode == "subprocess":
+            logger.warning(_HOST_WARNING)
         self.timeout_sec = timeout_sec
         self.image = image
 
     async def run_pytest(self, worktree_path: Path) -> tuple[bool, str]:
         if self.mode == "docker":
             return await self._run_docker(worktree_path, ["python", *_PYTEST_ARGS])
+        logger.warning(_HOST_WARNING)
         return await self._run([sys.executable, *_PYTEST_ARGS], cwd=worktree_path, env=_sandbox_env())
 
     async def run_linter(self, worktree_path: Path, file: str) -> tuple[bool, str]:
         target = str(PurePosixPath(Path(file).as_posix()))
         if self.mode == "docker":
             return await self._run_docker(worktree_path, ["ruff", "check", "--no-cache", target])
+        logger.warning(_HOST_WARNING)
         return await self._run(
             [sys.executable, "-m", "ruff", "check", "--no-cache", target],
             cwd=worktree_path,

@@ -24,7 +24,8 @@ class Settings(BaseSettings):
     MAX_FIX: int = Field(default=2, ge=0)
     MAX_REVISIONS: int = Field(default=2, ge=0)
 
-    # "auto" = docker when available, subprocess otherwise (resolved by the sandbox).
+    # "auto" = docker, and refuse to run if Docker or the image is missing (fail closed).
+    # "subprocess" runs generated code on the host: explicit opt-in only, warned on every run.
     SANDBOX_MODE: Literal["auto", "docker", "subprocess"] = "auto"
     SANDBOX_TIMEOUT_SEC: int = Field(default=120, gt=0)
     SANDBOX_IMAGE: str = "mini-opencode-sandbox:latest"  # built from sandbox/Dockerfile

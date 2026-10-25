@@ -20,7 +20,7 @@ ruff check src tests
 pyright src
 python -m src.cli --help       # start | status | decide | resume | sweep | report  (--mock-llm)
 streamlit run src/dashboard.py # Phase 5
-docker build -t mini-opencode-sandbox sandbox/   # once, for SANDBOX_MODE=docker
+docker build -t mini-opencode-sandbox sandbox/   # once; SANDBOX_MODE=auto fails closed without it
 ```
 
 ## Architecture (5 lines)
