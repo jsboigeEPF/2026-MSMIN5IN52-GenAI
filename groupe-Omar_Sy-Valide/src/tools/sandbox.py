@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, cast
 
+from src.tools.checks import Check
+
 SandboxMode = Literal["subprocess", "docker"]
 
 
@@ -114,13 +116,27 @@ class SandboxRunner:
         self.timeout_sec = timeout_sec
         self.image = image
 
-    async def run_pytest(self, worktree_path: Path, allow_no_tests: bool = False) -> tuple[bool, str]:
+    async def run_command(self, worktree_path: Path, check: Check) -> tuple[bool, str]:
+        """A project's own test or lint command (npm test, go vet...), run in the worktree like pytest is."""
+        if self.mode == "docker":
+            raise SandboxUnavailableError(
+                f"SANDBOX_MODE=docker only has Python tools; '{check.label}' needs the local mode"
+            )
+        env = {**_sandbox_env(), "CI": "true"}  # test runners stay non-interactive (no watch mode)
+        result = await self._run(list(check.argv), cwd=worktree_path / check.cwd, env=env)
+        return result.code == 0, result.text or f"{check.label}: exit code {result.code}"
+
+    async def run_pytest(
+        self, worktree_path: Path, allow_no_tests: bool = False, python: Path | None = None
+    ) -> tuple[bool, str]:
         """`allow_no_tests`: pytest exit code 5 (nothing collected) passes, for a repository that has no
-        tests at all. Off by default, so a change that loses every test does not pass by accident."""
+        tests at all. Off by default, so a change that loses every test does not pass by accident.
+        `python`: the target project's interpreter, so its dependencies are importable (subprocess mode)."""
         if self.mode == "docker":
             result = await self._run_docker(worktree_path, ["python", *_PYTEST_ARGS])
         else:
-            result = await self._run([sys.executable, *_PYTEST_ARGS], cwd=worktree_path, env=_sandbox_env())
+            interpreter = str(python or sys.executable)
+            result = await self._run([interpreter, *_PYTEST_ARGS], cwd=worktree_path, env=_sandbox_env())
         if result.code == 5 and allow_no_tests:
             return True, result.text + "\n(no tests in the repository: nothing to run)"
         return result.code == 0, result.text

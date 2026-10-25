@@ -8,7 +8,7 @@ STEP_LABELS = {
     Step.PLAN_APPROVAL: "Validation du plan",
     Step.CODE: "Génération du code",
     Step.WRITE_APPROVAL: "Validation de l'écriture",
-    Step.VERIFY: "Tests (pytest + ruff)",
+    Step.VERIFY: "Tests et lint",
     Step.FINALIZE: "Écriture du fichier",
 }
 

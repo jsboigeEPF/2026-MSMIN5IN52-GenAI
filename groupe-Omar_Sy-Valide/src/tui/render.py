@@ -71,7 +71,9 @@ def verification_text(v: VerificationResult) -> Text:
     def verdict(name: str, ok: bool) -> Text:
         return Text.assemble((" ✓ " if ok else " ✗ ", "green" if ok else "red"), name)
 
-    return Text.assemble(verdict("pytest", v.pytest_passed), "  ", verdict("ruff", v.linter_passed))
+    return Text.assemble(
+        verdict(v.tests_label, v.pytest_passed), "  ", verdict(v.lint_label, v.linter_passed)
+    )
 
 
 def outcome_panel(state: AgentProcessState, cost_eur: float) -> Panel:

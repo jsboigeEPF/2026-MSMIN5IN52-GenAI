@@ -101,7 +101,11 @@ async def _describe(runner: ProcessRunner, state: AgentProcessState) -> str:
     if state.verification is not None:
         v = state.verification
         verdict = {True: "PASSED", False: "FAILED"}
-        lines.append(f"verification: pytest {verdict[v.pytest_passed]}, ruff {verdict[v.linter_passed]}")
+        tests, lint = (
+            f"{v.tests_label} {verdict[v.pytest_passed]}",
+            f"{v.lint_label} {verdict[v.linter_passed]}",
+        )
+        lines.append(f"verification: {tests}, {lint}")
         if v.error_summary:
             lines.append("  summary: " + v.error_summary.replace("\n", "\n  "))
     if state.unified_diff:

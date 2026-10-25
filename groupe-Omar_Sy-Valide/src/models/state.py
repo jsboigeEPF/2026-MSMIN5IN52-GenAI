@@ -49,11 +49,14 @@ class StepMetrics(BaseModel):
 
 
 class VerificationResult(BaseModel):
-    pytest_passed: bool
+    # Field names come from the Python-only version; the labels say which tools actually ran.
+    pytest_passed: bool  # the tests (pytest, npm test, go test...)
     pytest_output: str
-    linter_passed: bool
+    linter_passed: bool  # the linter (ruff, npm run lint, go vet...)
     linter_output: str
     error_summary: str | None = None
+    tests_label: str = "pytest"
+    lint_label: str = "ruff"
 
 
 def _reject_control_chars(value: str) -> str:

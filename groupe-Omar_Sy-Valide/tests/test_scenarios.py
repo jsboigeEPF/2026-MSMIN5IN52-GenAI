@@ -227,3 +227,32 @@ async def test_project_without_tests_and_with_old_lint_debt(
     await runner.decide(run_id, decision("approve"))
     state = await runner.decide(run_id, decision("approve"))
     assert (state.status, state.terminal_reason) == (ProcessStatus.COMPLETED, None), state.verification
+
+
+# 11 ----------------------------------------------------------------------------------------------------
+async def test_a_css_change_is_never_linted_as_python(git_repo: Path, make_runner: RunnerFactory) -> None:
+    css = PlanOutput(target_file="frontend/app/globals.css", steps=["add a body margin"])
+    patch = CodePatch(new_content="body {\n  margin: 0;\n}\n", rationale="reset")
+    runner = make_runner(FakeLLM({"planner": [css], "coder": [patch]}))
+    run_id = await runner.start(request(git_repo, target_file=None))
+    await runner.decide(run_id, decision("approve"))
+    state = await runner.decide(run_id, decision("approve"))
+    assert (state.status, state.terminal_reason) == (ProcessStatus.COMPLETED, None), state.verification
+    assert state.verification is not None and state.verification.lint_label != "ruff"
+    assert "nothing to run" in state.verification.pytest_output
+
+
+async def test_omar_toml_commands_verify_other_languages(git_repo: Path, make_runner: RunnerFactory) -> None:
+    (git_repo / "check_css.py").write_text("import sys\n\nsys.exit('red' in open('style.css').read())\n")
+    (git_repo / ".omar.toml").write_text('[checks]\ntest = "python3 check_css.py"\n')
+    css = PlanOutput(target_file="style.css", steps=["blue text"])
+    red = CodePatch(new_content="p { color: red; }\n", rationale="r")
+    blue = CodePatch(new_content="p { color: blue; }\n", rationale="b")
+    runner = make_runner(FakeLLM({"planner": [css], "coder": [red, blue]}))
+    run_id = await runner.start(request(git_repo, target_file=None))
+    await runner.decide(run_id, decision("approve"))
+    state = await runner.decide(run_id, decision("approve"))  # "red" fails the project's own test
+    assert state.current_step == "write_approval" and state.fix_iteration == 1
+    state = await runner.decide(run_id, decision("approve"))
+    assert state.status is ProcessStatus.COMPLETED
+    assert state.verification is not None and state.verification.tests_label == "python3 check_css.py"

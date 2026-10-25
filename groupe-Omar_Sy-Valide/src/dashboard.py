@@ -415,12 +415,14 @@ def _run_details(view: RunView, db: Path, mock: bool, script: Path | None) -> No
             st.write("Pas encore testé.")
         else:
             verdict = {True: "✅ réussi", False: "❌ en échec"}
-            st.write(f"pytest : {verdict[v.pytest_passed]} — ruff : {verdict[v.linter_passed]}")
+            st.write(
+                f"{v.tests_label} : {verdict[v.pytest_passed]} — {v.lint_label} : {verdict[v.linter_passed]}"
+            )
             if v.error_summary:
                 st.markdown(f"**Résumé donné au modèle :** {md_escape(v.error_summary)}")
-            with st.expander("Sortie de pytest"):
+            with st.expander(f"Sortie de {v.tests_label}"):
                 st.code(v.pytest_output or "(vide)")
-            with st.expander("Sortie de ruff"):
+            with st.expander(f"Sortie de {v.lint_label}"):
                 st.code(v.linter_output or "(vide)")
     with graph_tab:
         visited = {e.step for e in view.events if e.event_type == "step_completed"}

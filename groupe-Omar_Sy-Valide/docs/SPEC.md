@@ -149,12 +149,13 @@ Plain Python classes, unit-tested, **called by step code only** (no LLM tool cal
 3. **`PatchEngine`** (`patch.py`)
    - `diff(file, old, new) -> unified_diff`: pure, shown at the write gate before anything is written.
    - `apply(root, file, new_content)`: writes under `root` (the run worktree, then, once approved and verified, the user's working tree). `resolve` refuses absolute paths, `..` escapes and `.git/` / `.mini-opencode/`.
-4. **`SandboxRunner`** (`sandbox.py`)
+4. **`plan_checks`** (`checks.py`): the tests and linter for the target file, from the project around it: pytest + ruff for `.py`; the nearest `package.json`'s `test` / `lint` npm scripts (its `node_modules` shared with the worktree); `go test` / `go vet`; `cargo test`; nothing (said explicitly) otherwise. A `.omar.toml` (`[checks] cwd/test/lint`) overrides the detection.
+5. **`SandboxRunner`** (`sandbox.py`)
    - `run_pytest(worktree_path)` and `run_linter(worktree_path, file)` (`ruff`), each returning `(passed, output)`.
    - `SANDBOX_MODE=subprocess` (default): `cwd=worktree`, stripped environment (no API keys), `timeout=SANDBOX_TIMEOUT_SEC`. Safe as a default because only human-approved code ever runs (write gate before verify).
    - `SANDBOX_MODE=docker` (optional): `docker run --rm --network none -v <worktree>:/work:ro -w /work <image> ...`; fails closed if Docker or the image is missing.
    - A timeout counts as a failure with an explicit message.
-5. **git helpers** (`git_ops.py`)
+6. **git helpers** (`git_ops.py`)
    - `run_git(cwd, *args)` and `list_files(repo)` (tracked + untracked, not ignored), used by the planner to choose the file. No commit: the agent writes the approved file and leaves committing to the user.
 
 ---

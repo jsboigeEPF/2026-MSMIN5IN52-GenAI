@@ -32,8 +32,8 @@ docker build -t mini-opencode-sandbox sandbox/   # optional, only for SANDBOX_MO
 3. `process/steps.py`: plan → plan_approval → code → write_approval → verify → finalize (writes the user's file,
    no commit; `undo` restores it); `compensation.py` discards the worktree. No code runs before the write gate.
 4. `llm/`: structured-output calls via SK services `planner` / `coder` / `summarizer`, LLM cache, cost; `fake.py` for mock.
-5. `tools/`: deterministic git worktree, AST inspector, patch (diff/apply), sandbox (subprocess default |
-   docker), git helpers; `storage/` SQLite journal. `.env` and the default DB are anchored to the project dir.
+5. `tools/`: deterministic git worktree, AST inspector, patch (diff/apply), checks (tests/lint per language,
+   `.omar.toml`), sandbox (subprocess default | docker), git helpers; `storage/` SQLite journal. `.env` and the default DB are anchored to the project dir.
 
 ## Non-negotiable rules
 - Graph transitions are code, never decided by an LLM. Tools are called by step code, never by the LLM.

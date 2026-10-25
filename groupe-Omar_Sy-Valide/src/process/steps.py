@@ -28,6 +28,7 @@ from src.models.state import (
     VerificationResult,
 )
 from src.process.graph import GATES, Event, Limits, Step, fixes_exhausted
+from src.tools.checks import Check, link_node_modules, plan_checks, project_python
 from src.tools.git_ops import list_files
 from src.tools.inspector import CodeInspector
 from src.tools.patch import PatchEngine
@@ -122,11 +123,12 @@ PLANNER_SYSTEM = (
 )
 CODER_SYSTEM = (
     "You are the code-generation step of a coding agent. Follow the plan and return the COMPLETE new content "
-    "of the target file (not a diff) plus a one-sentence rationale. The code must pass pytest and ruff. "
+    "of the target file (not a diff) plus a one-sentence rationale. The code must pass the project's tests "
+    "and linter. "
     "Reply with one JSON object matching this schema: {schema}"
 )
 SUMMARIZER_SYSTEM = (
-    "Condense failing pytest/ruff output into the facts a developer needs to fix the code: "
+    "Condense failing test and lint output into the facts a developer needs to fix the code: "
     "failing test names, "
     "assertion or error messages, file:line. At most 15 lines, no advice. "
     "Reply with one JSON object matching this schema: {schema}"
@@ -244,20 +246,26 @@ class CodeGenerationStep:
 
 
 class VerificationStep:
-    """Writes the approved content into the run worktree, then runs pytest and ruff on it."""
+    """Writes the approved content into the run worktree, then runs the project's tests and linter on it
+    (pytest and ruff for Python, the npm scripts for a Node project...: see `tools/checks.py`)."""
 
     step = Step.VERIFY
 
     async def run(self, state: AgentProcessState, ctx: StepContext) -> StepResult:
-        worktree, target = _worktree(state), _target(state)
+        worktree, target, repo = _worktree(state), _target(state), Path(state.target_repo_path)
         ctx.patch.apply(worktree, target, state.generated_code or "")
-        (pytest_ok, pytest_out), (lint_ok, lint_out) = await asyncio.gather(
-            ctx.require_sandbox().run_pytest(worktree, allow_no_tests=not _has_tests(state)),
-            ctx.require_sandbox().run_linter(worktree, target, baseline=state.original_file_content),
+        plan = plan_checks(repo, target)
+        link_node_modules(repo, worktree, plan)
+        (tests_ok, tests_out), (lint_ok, lint_out) = await asyncio.gather(
+            self._run_check(plan.tests, state, ctx), self._run_check(plan.lint, state, ctx)
         )
+        if plan.note:
+            tests_out = f"{tests_out}\n({plan.note})".strip()
         usage, summary = LLMUsage(), None
-        if not (pytest_ok and lint_ok):
-            checks = (("pytest", pytest_ok, pytest_out), ("ruff", lint_ok, lint_out))
+        tests_label = plan.tests.label if plan.tests else "aucun test"
+        lint_label = plan.lint.label if plan.lint else "aucun lint"
+        if not (tests_ok and lint_ok):
+            checks = ((tests_label, tests_ok, tests_out), (lint_label, lint_ok, lint_out))
             failing = [(name, out) for name, ok, out in checks if not ok]
             result = await ctx.require_llm().structured(
                 run_id=state.run_id,
@@ -271,14 +279,29 @@ class VerificationStep:
             usage, summary = result.usage, result.output.summary
             state.fix_iteration += 1
         state.verification = VerificationResult(
-            pytest_passed=pytest_ok,
-            pytest_output=pytest_out,
+            pytest_passed=tests_ok,
+            pytest_output=tests_out,
             linter_passed=lint_ok,
             linter_output=lint_out,
             error_summary=summary,
+            tests_label=tests_label,
+            lint_label=lint_label,
         )
-        passed = pytest_ok and lint_ok
+        passed = tests_ok and lint_ok
         return StepResult(Event.VERIFICATION_PASSED if passed else Event.VERIFICATION_FAILED, usage)
+
+    @staticmethod
+    async def _run_check(check: Check | None, state: AgentProcessState, ctx: StepContext) -> tuple[bool, str]:
+        """No known check is a pass: nothing can be run for this kind of file (the note says so)."""
+        if check is None:
+            return True, ""
+        sandbox, worktree = ctx.require_sandbox(), _worktree(state)
+        if check.kind == "pytest":
+            python = project_python(Path(state.target_repo_path))
+            return await sandbox.run_pytest(worktree, allow_no_tests=not _has_tests(state), python=python)
+        if check.kind == "ruff":
+            return await sandbox.run_linter(worktree, _target(state), baseline=state.original_file_content)
+        return await sandbox.run_command(worktree, check)
 
 
 class DecisionRequest(BaseModel):

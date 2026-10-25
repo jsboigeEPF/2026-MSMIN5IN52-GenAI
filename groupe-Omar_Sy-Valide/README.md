@@ -31,7 +31,27 @@ et l'auto-correction (verify → code, dont la correction repasse par la validat
 essais), abandonner, ou écrire quand même (issue `written_despite_failing_tests`). Toutes les autres issues
 mènent à une compensation (suppression du worktree).
 
-**Vérification juste.** Un dépôt qui n'a aucun fichier de test passe (« aucun test ») ; un dépôt qui en avait et n'en collecte plus
+**Vérification selon le langage.** L'agent lance les outils du projet qui contient le fichier modifié :
+
+| Fichier | Tests | Lint |
+|---|---|---|
+| `.py` | `pytest` (avec le `.venv` du projet s'il en a un) | `ruff` |
+| dans un projet Node (`package.json` le plus proche) : `.ts`, `.tsx`, `.js`, `.css`… | `npm test` si le script existe | `npm run lint` si le script existe |
+| `.go` dans un module Go | `go test ./...` | `go vet ./...` |
+| `.rs` dans une crate | `cargo test` | — |
+| autre (`.md`…) | rien, et l'agent le dit | — |
+
+Le `node_modules` du projet est partagé avec la copie de test. Pour imposer d'autres commandes, ajoute un
+`.omar.toml` à la racine du projet :
+
+```toml
+[checks]
+cwd = "frontend"        # où lancer les commandes
+test = "npm test"       # "" pour désactiver
+lint = "npm run lint"
+```
+
+Un dépôt Python qui n'a aucun fichier de test passe (« aucun test ») ; un dépôt qui en avait et n'en collecte plus
 échoue. ruff applique la configuration du projet
 cible, mais seules les violations introduites par le changement comptent : l'IA n'est pas pénalisée pour du
 code qui existait avant. Détail dans [docs/SPEC.md](docs/SPEC.md) §5.
@@ -165,7 +185,7 @@ ruff check src tests
 pyright src      # mode strict
 ```
 
-190 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
+200 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
 
 - **Scénarios de bout en bout** (`tests/test_scenarios.py`, SPEC §8) : nominal (fichier choisi par l'IA),
   rejet à chaque porte, expiration, reprise en attente de validation, crash au milieu d'une étape (réponse
