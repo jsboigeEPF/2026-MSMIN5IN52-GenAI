@@ -42,12 +42,10 @@ Thumbs.db
 *.gguf
 *.onnx
 models/
+outputs/
 
 # Local tooling
 .mcp.json
 .claude/
 .playwright-mcp/
 /CLAUDE.md
-
-
-outputs/
