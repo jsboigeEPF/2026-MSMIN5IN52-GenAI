@@ -8,7 +8,8 @@
   "permissions": {
     "deny": [
       "Read(**/.env)",
-      "Read(**/.env.*)",
+      "Read(**/.env.local)",
+      "Read(**/.env.*.local)",
       "Bash(git push --force *)",
       "Bash(git push -f *)"
     ]
