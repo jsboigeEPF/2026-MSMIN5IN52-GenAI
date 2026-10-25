@@ -13,6 +13,7 @@ class VadConfig:
     end_silence_ms: int = 450     # silence requis pour déclarer la fin de tour
     preroll_ms: int = 300         # audio conservé avant le début détecté
     min_voiced_ms: int = 200      # en dessous, le segment est jeté (bruit)
+    min_level_dbfs: float = -120.0  # porte de niveau : une trame plus faible que cela n'est jamais de la parole (-120 = désactivée)
     max_speech_s: float = 30.0
     frame_ms: int = 32
 

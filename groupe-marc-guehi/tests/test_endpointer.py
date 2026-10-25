@@ -43,3 +43,27 @@ def test_preroll_is_included_and_state_resets():
 def test_hysteresis_keeps_speech_alive_between_thresholds():
     ev = run([0.9] * 10 + [0.4] * 30)  # 0.4 > neg_threshold : pas du silence
     assert [e.kind for e in ev] == ["speech_start"]
+
+
+def test_level_gate_ignores_quiet_frames():
+    import numpy as np
+
+    from src.audio.pcm import rms_dbfs
+    from src.orchestrator.capture import Capture
+    quiet = (np.ones(512) * 30).astype(np.int16).tobytes()      # ≈ -60 dBFS
+    loud = (np.ones(512) * 3000).astype(np.int16).tobytes()     # ≈ -21 dBFS
+    assert rms_dbfs(quiet) < -50 < rms_dbfs(loud) and rms_dbfs(b"") == -120.0
+
+    class Vad:
+        def prob(self, f): return 0.9
+        def reset(self): pass
+
+    class Deps:
+        vad, endpointer = Vad(), Endpointer(VadConfig(min_level_dbfs=-50))
+
+    cap = Capture.__new__(Capture)
+    cap.deps, cap._buf, cap.strict_until = Deps, b"", 0.0
+    cap.cfg = type("C", (), {"barge_prob": 0.6, "speculative_ms": 0, "barge_min_ms": 300})()
+    cap._agent_active = lambda: False
+    assert [s.kind for s in cap.frames(quiet * 10)] == []
+    assert "speech_start" in [s.kind for s in cap.frames(loud * 10)]

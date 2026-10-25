@@ -34,6 +34,15 @@ def resample(pcm: bytes, src: int, dst: int) -> bytes:
     return np.interp(np.linspace(0, len(x) - 1, n), np.arange(len(x)), x).astype(np.int16).tobytes()
 
 
+def rms_dbfs(pcm: bytes) -> float:
+    """Niveau efficace en dB par rapport à la pleine échelle (0 dBFS = ±32768) ; -120 pour un silence numérique."""
+    if not pcm:
+        return -120.0
+    x = np.frombuffer(pcm, np.int16).astype(np.float64) / 32768.0
+    rms = float(np.sqrt(np.mean(x * x)))
+    return 20 * np.log10(rms) if rms > 1e-6 else -120.0
+
+
 def silence(ms: int, rate: int) -> bytes:
     return b"\x00\x00" * int(rate * ms / 1000)
 

@@ -21,7 +21,7 @@ Toutes les briques tournent en tâches `asyncio` reliées par des files bornées
 `session.py` est un coordinateur mince ; configuration : `SessionConfig` (depuis `configs/base.yaml`) et dépendances : `SessionDeps` (`session_config.py`).
 | Module | Responsabilité |
 |---|---|
-| `capture.py` | trames micro → VAD → endpointer, seuil relevé quand l'agent parle, STT spéculatif |
+| `capture.py` | trames micro → porte de niveau (`vad.min_level_dbfs`) → VAD → endpointer, seuil relevé quand l'agent parle, STT spéculatif |
 | `turn_runner.py`, `turn_metrics.py` | un tour : accroche, `run_turn`, historique, message `metrics` |
 | `waiting.py` | accroche d'ouverture, annonce de recherche, 2e phrase d'attente |
 | `interruption.py`, `truncation.py` | barge-in, texte entendu, accusé du client |

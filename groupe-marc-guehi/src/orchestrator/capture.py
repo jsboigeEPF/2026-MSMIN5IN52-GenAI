@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 
+from src.audio.pcm import rms_dbfs
 from src.orchestrator.session_config import SessionConfig, SessionDeps
 from src.orchestrator.tasks import TurnTasks
 from src.vad.endpointer import Event
@@ -43,7 +44,9 @@ class Capture:
         self._buf += data
         while len(self._buf) >= FRAME_BYTES:
             frame, self._buf = self._buf[:FRAME_BYTES], self._buf[FRAME_BYTES:]
-            prob = self.deps.vad.prob(frame)
+            prob = self.deps.vad.prob(frame)  # appelé à chaque trame : le VAD garde son état même si la trame est ignorée
+            if rms_dbfs(frame) < ep.cfg.min_level_dbfs:
+                prob = 0.0
             strict = self._agent_active() or (time.monotonic() < self.strict_until and not ep.in_speech)
             if strict and prob < self.cfg.barge_prob:
                 prob = 0.0

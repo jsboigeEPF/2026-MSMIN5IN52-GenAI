@@ -8,6 +8,7 @@ vad:
   end_silence_ms: 450       # fin de tour (à calibrer ; 600 ms dans la référence mesurée)
   preroll_ms: 300
   min_voiced_ms: 200
+  min_level_dbfs: -50       # sensibilité : trames plus faibles (bruit de fond, souffle) ignorées avant le VAD ; relever (ex. -40) en ambiance bruyante, baisser si la voix est coupée ; -120 = off
 session:
   max_history_messages: 20
   strict_after_s: 0.5       # après la fin de lecture : seuil VAD relevé (écho résiduel)
@@ -20,7 +21,7 @@ session:
   strict_transitions: false     # true (tests) : une transition d'état illégale lève une erreur ; sinon elle est tracée (`state_illegal`)
 filler:
   enabled: true
-  min_speech_ms: 1800       # pas d'accroche après un énoncé très court (« bonjour », « merci »)
+  min_speech_ms: 0          # durée minimale de l'énoncé pour une accroche ; 0 = toujours (1800 évitait l'accroche sur « bonjour », « merci »)
   texts:                    # neutres : choisies avant de connaître la question
     - "Alors,"
     - "Hmm, voyons."
