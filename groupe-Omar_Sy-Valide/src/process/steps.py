@@ -28,7 +28,7 @@ from src.models.state import (
     VerificationResult,
 )
 from src.process.graph import GATES, Event, Limits, Step, fixes_exhausted
-from src.tools.checks import Check, link_node_modules, plan_checks, project_python
+from src.tools.checks import Check, link_node_modules, plan_checks
 from src.tools.git_ops import list_files
 from src.tools.inspector import CodeInspector
 from src.tools.patch import PatchEngine
@@ -297,7 +297,7 @@ class VerificationStep:
             return True, ""
         sandbox, worktree = ctx.require_sandbox(), _worktree(state)
         if check.kind == "pytest":
-            python = project_python(Path(state.target_repo_path))
+            python = await sandbox.project_python(Path(state.target_repo_path))
             return await sandbox.run_pytest(worktree, allow_no_tests=not _has_tests(state), python=python)
         if check.kind == "ruff":
             return await sandbox.run_linter(worktree, _target(state), baseline=state.original_file_content)

@@ -16,7 +16,6 @@ A `.omar.toml` at the repository root overrides the detection:
 import json
 import shlex
 import shutil
-import subprocess
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -115,19 +114,3 @@ def link_node_modules(repo: Path, worktree: Path, plan: CheckPlan) -> None:
     link = worktree / plan.node_modules / "node_modules"
     if source.is_dir() and not link.exists():
         link.symlink_to(source, target_is_directory=True)
-
-
-def project_python(repo: Path) -> Path | None:
-    """The target project's own virtualenv, if it has pytest: its dependencies (fastapi...) are then
-    importable by the tests. None falls back to the agent's interpreter."""
-    for candidate in (".venv/bin/python", "venv/bin/python", ".venv/Scripts/python.exe"):
-        python = repo / candidate
-        if not python.exists():
-            continue
-        try:
-            probe = subprocess.run([str(python), "-c", "import pytest"], capture_output=True, timeout=30)
-        except (OSError, subprocess.TimeoutExpired):
-            continue
-        if probe.returncode == 0:
-            return python
-    return None

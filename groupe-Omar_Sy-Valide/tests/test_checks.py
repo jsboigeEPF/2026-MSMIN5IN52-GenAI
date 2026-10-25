@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from src.tools.checks import Check, CheckPlan, link_node_modules, plan_checks, project_python
+from src.tools.checks import Check, CheckPlan, link_node_modules, plan_checks
+from src.tools.sandbox import SandboxRunner
 
 
 def package(repo: Path, directory: str, scripts: dict[str, str]) -> None:
@@ -66,10 +67,11 @@ def test_node_modules_are_shared_with_the_worktree(tmp_path: Path) -> None:
     assert (worktree / "frontend" / "node_modules").resolve() == (repo / "frontend" / "node_modules")
 
 
-def test_the_projects_own_virtualenv_runs_the_tests(tmp_path: Path) -> None:
-    assert project_python(tmp_path) is None
-    (tmp_path / ".venv" / "bin").mkdir(parents=True)
+async def test_the_projects_own_virtualenv_runs_the_tests(tmp_path: Path) -> None:
+    runner = SandboxRunner("subprocess", 30, "unused")
+    assert await runner.project_python(tmp_path) is None
     python = tmp_path / ".venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
     python.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')  # stands for a venv that has pytest
     python.chmod(0o755)
-    assert project_python(tmp_path) == tmp_path / ".venv" / "bin" / "python"
+    assert await runner.project_python(tmp_path) == python

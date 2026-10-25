@@ -116,6 +116,20 @@ class SandboxRunner:
         self.timeout_sec = timeout_sec
         self.image = image
 
+    async def project_python(self, repo: Path) -> Path | None:
+        """The target project's own virtualenv, if it has pytest: its dependencies (fastapi...) are then
+        importable by the tests. None (agent's interpreter) in docker mode or without a usable venv.
+        The probe runs like the tests: stripped environment, time limit."""
+        if self.mode == "docker":
+            return None
+        for candidate in (".venv/bin/python", "venv/bin/python", ".venv/Scripts/python.exe"):
+            python = repo / candidate
+            if python.exists():
+                probe = await self._run([str(python), "-c", "import pytest"], cwd=repo, env=_sandbox_env())
+                if probe.code == 0:
+                    return python
+        return None
+
     async def run_command(self, worktree_path: Path, check: Check) -> tuple[bool, str]:
         """A project's own test or lint command (npm test, go vet...), run in the worktree like pytest is."""
         if self.mode == "docker":
