@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 from textual.pilot import Pilot
-from textual.widgets import Input
+from textual.widgets import Input, OptionList
 
 from src.models.state import ProcessStatus
 from src.process.engine import DecisionRequest, StartRequest
@@ -252,3 +252,34 @@ def test_live_panel_shows_code_as_text_and_neutralises_escapes() -> None:
     text = out.getvalue()
     assert "Omar écrit le code (en direct)" in text and "    return a + b" in text
     assert "\x1b[2K" not in text and "\\x1b[2K" in text
+
+
+async def test_at_opens_an_interactive_file_list_and_locks_the_target(git_repo: Path, tmp_path: Path) -> None:
+    app = OmarApp(git_repo, db=tmp_path / "t.db", llm_script=script(tmp_path))
+    async with app.run_test(size=(140, 50)) as pilot:
+        await pilot.press(*"Corrige @ca")
+        await pilot.pause()
+        menu = app.query_one("#mentions", OptionList)
+        assert app.mentions_open and [menu.get_option_at_index(i).id for i in range(menu.option_count)] == [
+            "calc.py",
+            "tests/test_calc.py",
+        ]
+        await pilot.press("down", "up", "enter")  # Entrée inserts the highlighted file, it does not submit
+        await pilot.pause()
+        assert app.query_one("#prompt", Input).value == "Corrige @calc.py " and not app.mentions_open
+        await pilot.press("escape")  # nothing open: Échap does nothing harmful
+        await pilot.press(*"stp", "enter")
+        await settle(app, pilot)
+        assert app.state is not None and app.state.target_file == "calc.py" and app.state.file_locked
+
+
+async def test_resume_without_id_picks_the_latest_run(git_repo: Path, tmp_path: Path) -> None:
+    db, llm = tmp_path / "t.db", script(tmp_path, planner=2)
+    async with open_runner(db, drive=True, mock=True, script=llm) as runner:
+        await runner.start(StartRequest(target_repo_path=str(git_repo), user_prompt="first", run_id="old-1"))
+        await runner.start(StartRequest(target_repo_path=str(git_repo), user_prompt="second", run_id="new-2"))
+    app = OmarApp(git_repo, db=db, llm_script=llm)
+    async with app.run_test(size=(140, 50)) as pilot:
+        await type_task(app, pilot, "/resume")
+        assert app.run_id == "new-2" and app.pending_gate() == "plan"
+        assert "Reprise du run new-2" in transcript(app)

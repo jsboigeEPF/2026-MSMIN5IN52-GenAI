@@ -123,7 +123,11 @@ installé, la commande `omar` fait la même chose depuis n'importe quel dépôt.
 Dans l'interface :
 - écris une tâche, par exemple « corrige add() et mean() pour que les tests passent », puis Entrée ;
 - à chaque validation, **o** = Oui, **n** = Non, **a** = Affiner (tu écris ce qu'il faut changer, Entrée) ;
-- `/runs`, `/resume <id>`, `/undo`, `/repo <chemin>`, `/clear`, `/help`, `/quit` (ou Ctrl+Q).
+- **@ pour citer un fichier** : une liste filtrée des fichiers du dépôt s'ouvre au-dessus de la saisie
+  (↑/↓ pour choisir, Entrée ou Tab pour insérer, Échap pour fermer). Le premier fichier cité devient le
+  fichier à modifier ; sans @, l'IA le choisit.
+- `/resume` reprend le dernier run du dépôt (ou `/resume <id>` un run précis), `/runs`, `/undo`,
+  `/repo <chemin>`, `/clear`, `/help`, `/quit` (ou Ctrl+Q).
 
 Les réponses du modèle s'affichent **en direct** pendant leur génération (plan, code, résumé d'erreur, et le
 raisonnement des modèles qui en produisent), puis laissent la place au résultat validé.
@@ -191,7 +195,7 @@ ruff check src tests
 pyright src      # mode strict
 ```
 
-205 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
+211 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
 
 - **Scénarios de bout en bout** (`tests/test_scenarios.py`, SPEC §8) : nominal (fichier choisi par l'IA),
   rejet à chaque porte, expiration, reprise en attente de validation, crash au milieu d'une étape (réponse

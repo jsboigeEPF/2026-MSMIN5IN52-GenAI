@@ -15,6 +15,7 @@ import logging
 import time
 import uuid
 from contextlib import AsyncExitStack
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
@@ -25,7 +26,8 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, VerticalScroll
-from textual.widgets import Button, Footer, Header, Input, Static
+from textual.widgets import Button, Footer, Header, Input, OptionList, Static
+from textual.widgets.option_list import Option
 
 from src.config import DEFAULT_DB, PROJECT_DIR, Settings
 from src.llm.client import LLMProviderError
@@ -36,9 +38,10 @@ from src.process.graph import GATES, Step
 from src.process.steps import HumanApprovalStep
 from src.runtime import open_runner
 from src.safe_text import printable
-from src.tools.git_ops import GitError, run_git
+from src.tools.git_ops import GitError, list_files, run_git
 from src.tools.sandbox import SandboxUnavailableError
 from src.tui import render
+from src.tui.mentions import insert_mention, match_files, mention_at, mentioned_files
 
 Action = Literal["approve", "revise", "reject", "write_anyway"]
 
@@ -55,9 +58,10 @@ EXPECTED_ERRORS = (
 
 HELP = """\
 Écris une tâche (ex. « corrige add() et mean() pour que les tests passent ») puis Entrée.
+@ pour citer un fichier du dépôt : il devient le fichier à modifier (sinon l'IA le choisit).
 À chaque validation : o = Oui · n = Non · a = Affiner (tu écris ce qu'il faut changer).
 
-/runs            liste des runs          /resume <id>   reprendre un run
+/runs            liste des runs          /resume [id]   reprendre le dernier run (ou celui-ci)
 /undo [id]       annuler la dernière écriture
 /repo <chemin>   changer de dépôt cible  /clear         vider l'écran
 /help            cette aide              /quit          quitter (ou Ctrl+Q)"""
@@ -71,6 +75,47 @@ def find_repo(path: Path) -> Path:
             f"{top} contient l'agent lui-même : donne le dépôt à modifier, par ex. /repo ../../demo-calc"
         )
     return top
+
+
+PLACEHOLDER = "Décris la tâche… (@ pour citer un fichier, /help pour l'aide)"
+_NEVER = datetime(1970, 1, 1, tzinfo=UTC)
+
+
+class PromptInput(Input):
+    """The task input. While the @ suggestions are open, ↑/↓ move in them and Entrée/Tab insert the file."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("up", "mention_move(-1)", show=False),
+        Binding("down", "mention_move(1)", show=False),
+        Binding("tab", "mention_accept", show=False),
+        Binding("escape", "mention_close", show=False),
+    ]
+
+    @property
+    def omar(self) -> "OmarApp":
+        app: object = self.app  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        assert isinstance(app, OmarApp)
+        return app
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action.startswith("mention_"):
+            return self.omar.mentions_open  # otherwise the key keeps its usual meaning (Tab, Échap...)
+        return super().check_action(action, parameters)
+
+    def action_mention_move(self, step: int) -> None:
+        self.omar.move_mention(step)
+
+    def action_mention_accept(self) -> None:
+        self.omar.accept_mention()
+
+    def action_mention_close(self) -> None:
+        self.omar.close_mentions()
+
+    async def action_submit(self) -> None:
+        if self.omar.mentions_open:
+            self.omar.accept_mention()
+            return
+        await super().action_submit()
 
 
 class LiveReply:
@@ -135,6 +180,8 @@ class OmarApp(App[None]):
     #gate-question { width: 1fr; padding: 1 0; text-style: bold; }
     #gate Button { margin: 0 1; min-width: 14; }
     #prompt { margin: 0 1; }
+    #mentions { display: none; height: auto; max-height: 10; margin: 0 1; border: round $accent; }
+    #mentions.visible { display: block; }
     """
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("o", "decide('approve')", "Oui"),
@@ -167,6 +214,8 @@ class OmarApp(App[None]):
         self.refining = False
         self._stack = AsyncExitStack()
         self.live = LiveReply(self)
+        self.files: list[str] = []  # the target repository's files, for @ mentions
+        self.mention: tuple[int, str] | None = None  # the @mention being typed: (start, query)
 
     # --- layout ------------------------------------------------------------------------------------------
 
@@ -180,7 +229,8 @@ class OmarApp(App[None]):
             yield Button("Oui (o)", id="approve", variant="success")
             yield Button("Non (n)", id="reject", variant="error")
             yield Button("Affiner (a)", id="revise", variant="warning")
-        yield Input(id="prompt", placeholder="Décris la tâche… (/help pour l'aide)")
+        yield OptionList(id="mentions")
+        yield PromptInput(id="prompt", placeholder=PLACEHOLDER)
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -229,6 +279,7 @@ class OmarApp(App[None]):
             self.sub_title = "aucun dépôt"
             return
         branch = run_git(self.repo, "rev-parse", "--abbrev-ref", "HEAD")
+        self.files = list_files(self.repo)
         self.sub_title = f"{self.repo.name} · {branch}"
         self.say(Text.assemble("Dépôt cible : ", (str(self.repo), "bold"), f" (branche {branch})"))
 
@@ -301,6 +352,60 @@ class OmarApp(App[None]):
         self.show_gate(gate)
         self.refresh_sidebar()
 
+    # --- @ mentions ---------------------------------------------------------------------------------------
+
+    @property
+    def mentions_open(self) -> bool:
+        return self.query_one("#mentions", OptionList).has_class("visible")
+
+    @on(Input.Changed, "#prompt")
+    def prompt_changed(self, event: Input.Changed) -> None:
+        if self.refining or self.repo is None:
+            self.close_mentions()
+            return
+        prompt = self.query_one("#prompt", Input)
+        self.mention = mention_at(event.value, prompt.cursor_position)
+        if self.mention is None:
+            self.close_mentions()
+            return
+        if self.mention[1] == "":  # a fresh "@": pick up files created since
+            self.files = list_files(self.repo)
+        suggestions = match_files(self.files, self.mention[1])
+        menu = self.query_one("#mentions", OptionList)
+        menu.clear_options()
+        if not suggestions:
+            self.close_mentions()
+            return
+        menu.add_options([Option(Text(printable(path)), id=path) for path in suggestions])
+        menu.highlighted = 0
+        menu.add_class("visible")
+
+    def close_mentions(self) -> None:
+        self.query_one("#mentions", OptionList).remove_class("visible")
+
+    def move_mention(self, step: int) -> None:
+        menu = self.query_one("#mentions", OptionList)
+        if menu.option_count:
+            menu.highlighted = ((menu.highlighted or 0) + step) % menu.option_count
+
+    def accept_mention(self, index: int | None = None) -> None:
+        menu = self.query_one("#mentions", OptionList)
+        chosen = index if index is not None else menu.highlighted
+        if self.mention is None or chosen is None or not menu.option_count:
+            self.close_mentions()
+            return
+        path = menu.get_option_at_index(chosen).id or ""
+        prompt = self.query_one("#prompt", Input)
+        value, cursor = insert_mention(prompt.value, prompt.cursor_position, self.mention[0], path)
+        self.close_mentions()
+        prompt.value, prompt.cursor_position = value, cursor
+        self.mention = None
+
+    @on(OptionList.OptionSelected, "#mentions")
+    def mention_clicked(self, event: OptionList.OptionSelected) -> None:
+        self.accept_mention(event.option_index)
+        self.query_one("#prompt", Input).focus()
+
     # --- user input --------------------------------------------------------------------------------------
 
     @on(Input.Submitted, "#prompt")
@@ -355,7 +460,7 @@ class OmarApp(App[None]):
 
     def end_refine(self) -> None:
         self.refining = False
-        self.query_one("#prompt", Input).placeholder = "Décris la tâche… (/help pour l'aide)"
+        self.query_one("#prompt", Input).placeholder = PLACEHOLDER
         self.refresh_bindings()
 
     # --- engine calls (async workers: the screen stays responsive) -------------------------------------
@@ -365,10 +470,18 @@ class OmarApp(App[None]):
             self.error("aucun dépôt cible : /repo <chemin>")
             return
         self.say(render.user_message(text))
+        mentioned = mentioned_files(text, self.files)
+        target = mentioned[0] if mentioned else None
+        if len(mentioned) > 1:
+            self.say(Text(f"Un seul fichier par tâche : {target} sera modifié.", "yellow"))
         self.visited = set()
         self.run_id = uuid.uuid4().hex[:12]
         request = StartRequest(
-            target_repo_path=str(self.repo), user_prompt=text, scenario="tui", run_id=self.run_id
+            target_repo_path=str(self.repo),
+            target_file=target,
+            user_prompt=text,
+            scenario="tui",
+            run_id=self.run_id,
         )
         runner = self.runner
 
@@ -442,8 +555,12 @@ class OmarApp(App[None]):
             self.error("un traitement est en cours, patiente un instant")
         elif name == "/runs":
             await self.list_runs()
-        elif name == "/resume" and arg:
-            await self.resume(arg)
+        elif name == "/resume":
+            run_id = arg or await self.latest_run_id()
+            if run_id:
+                await self.resume(run_id)
+            else:
+                self.error("aucun run à reprendre dans ce dépôt")
         elif name == "/undo":
             await self.undo(arg or (self.state.run_id if self.state else ""))
         else:
@@ -467,6 +584,13 @@ class OmarApp(App[None]):
                 Text(printable(r.user_prompt[:50])),
             )
         self.say(table)
+
+    async def latest_run_id(self) -> str | None:
+        """The most recent run on the current repository."""
+        assert self.runner is not None
+        starts = await self.runner.store.run_starts()
+        mine = [s.run_id for s in await self.runner.store.list_runs() if s.target_repo_path == str(self.repo)]
+        return max(mine, key=lambda run_id: starts.get(run_id, _NEVER), default=None)
 
     async def resume(self, run_id: str) -> None:
         assert self.runner is not None
