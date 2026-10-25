@@ -8,6 +8,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from src import dashboard
+from src.labels import EDGE_LABELS
 from src.models.state import ProcessStatus, VerificationResult
 from src.process.engine import DecisionRequest, StartRequest
 from src.process.graph import TRANSITIONS, Step, Terminal
@@ -58,24 +59,31 @@ def test_graph_draws_every_transition_of_the_table(make_state: StateFactory) -> 
     dot = dashboard.build_dot(make_state(), visited=set())
     for t in TRANSITIONS:
         target = t.target.status.value if isinstance(t.target, Terminal) else t.target.value
-        assert re.search(rf'"{t.source.value}" -> "{target}" \[label="{re.escape(t.label)}"', dot), t
+        label = re.escape(EDGE_LABELS[t.label])  # every transition has a French label
+        assert re.search(rf'"{t.source.value}" -> "{target}" \[label="{label}"', dot), t
 
 
 def test_graph_highlights_the_current_step_and_visited_steps(make_state: StateFactory) -> None:
     state = make_state(status=ProcessStatus.AWAITING_APPROVAL, current_step="write_approval")
     dot = dashboard.build_dot(state, visited={"plan", "plan_approval", "code"})
-    assert f'"write_approval" [fillcolor="{dashboard.CURRENT}"' in dot
-    assert f'"plan" [fillcolor="{dashboard.VISITED}"' in dot
-    assert f'"finalize" [fillcolor="{dashboard.IDLE}"' in dot
+    assert f'"write_approval" [label="Validation de l\'écriture", fillcolor="{dashboard.CURRENT}"' in dot
+    assert f'"plan" [label="Planification", fillcolor="{dashboard.VISITED}"' in dot
+    assert f'"finalize" [label="Écriture du fichier", fillcolor="{dashboard.IDLE}"' in dot
 
 
 def test_graph_highlights_the_terminal_outcome(make_state: StateFactory) -> None:
     done = dashboard.build_dot(
         make_state(status=ProcessStatus.COMPLETED, current_step="end"), visited=set(Step)
     )
-    assert f'"COMPLETED" [fillcolor="{dashboard.SUCCESS}"' in done
+    assert f'"COMPLETED" [label="Terminé", fillcolor="{dashboard.SUCCESS}"' in done
     failed = dashboard.build_dot(make_state(status=ProcessStatus.FAILED, current_step="end"), visited=set())
-    assert f'"FAILED" [fillcolor="{dashboard.FAILURE}"' in failed
+    assert f'"FAILED" [label="Échoué", fillcolor="{dashboard.FAILURE}"' in failed
+    anyway = make_state(
+        status=ProcessStatus.COMPLETED, current_step="end", terminal_reason="written_despite_failing_tests"
+    )
+    assert f'"COMPLETED" [label="Terminé", fillcolor="{dashboard.FAILURE}"' in dashboard.build_dot(
+        anyway, set()
+    )
     assert dashboard.CURRENT not in failed
 
 
@@ -97,6 +105,26 @@ async def test_load_run_gathers_journal_approvals_metrics_and_cost(git_repo: Pat
     assert {m.step_name for m in view.metrics} == {s.value for s in Step}
     assert view.cost_usd == 0.0  # the fake LLM reports no cost
 
+    story = [item.title for item in dashboard.timeline(view)]
+    assert story[0] == "Tâche reçue" and story[-1] == "Terminé"
+    assert (
+        "Plan proposé (calc.py)" in story and "Tests réussis" in story and "Fichier écrit : calc.py" in story
+    )
+    assert (
+        story.index("alice a validé le plan")
+        < story.index("Code proposé")
+        < story.index("bob a validé l'écriture")
+    )
+    diff = next(item for item in dashboard.timeline(view) if item.title == "Code proposé")
+    assert diff.detail is not None and "+    return a + b" in diff.detail
+
+    [row] = await dashboard.load_runs(db)
+    label = dashboard.run_label(row)
+    assert label.endswith(" · target · Fix · Terminé") and "v-1" not in label
+    assert dashboard.filter_runs([row], "target", "Terminé") == [row]
+    assert dashboard.filter_runs([row], dashboard.ALL, "Échoué") == []
+    assert dashboard.filter_runs([row], "autre", dashboard.ALL) == []
+
 
 # --- the Streamlit page, headless ----------------------------------------------------------------------
 
@@ -111,20 +139,21 @@ def test_page_lists_the_run_and_approves_it(git_repo: Path, tmp_path: Path) -> N
     at.text_input(key="db_path").set_value(str(db)).run()
     assert not at.exception
     assert at.selectbox(key="run_id").value == "ui-1"
-    assert any("AWAITING_APPROVAL" in m.value for m in at.markdown)
+    assert "Fix add()" in at.selectbox(key="run_id").format_func("ui-1")  # a label, not the id
+    assert any("En attente de ta décision" in w.value for w in at.warning)
 
     at.checkbox(key="mock_llm").check().run()
     at.text_input(key="mock_script").set_value(str(script)).run()
     at.text_input(key="actor").set_value("alice").run()
-    assert any("Plan approval" in h.value for h in at.subheader)
+    assert any("valider ce plan" in h.value for h in at.subheader)
     at.button(key="approve").click().run()
     assert not at.exception
-    assert any("Write approval" in h.value for h in at.subheader)
+    assert any("écrire ce fichier" in h.value for h in at.subheader)
     assert (git_repo / "calc.py").read_text() != FIXED_CALC  # shown as a diff, not written yet
     at.button(key="approve").click().run()
 
     assert not at.exception
-    assert any("COMPLETED" in s.value for s in at.success)
+    assert any("Terminé" in s.value for s in at.success)
     assert (git_repo / "calc.py").read_text() == FIXED_CALC
 
 
@@ -139,7 +168,7 @@ def test_page_refuses_revise_without_comment(git_repo: Path, tmp_path: Path) -> 
     at.text_input(key="actor").set_value("alice").run()
     at.button(key="revise").click().run()
 
-    assert any("comment" in e.value for e in at.error)
+    assert any("commentaire obligatoire" in e.value for e in at.error)
     assert at.selectbox(key="run_id").value == "ui-2"
 
 

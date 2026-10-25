@@ -10,19 +10,12 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
+from src.labels import STEP_LABELS, TERMINAL_REASONS
 from src.models.state import AgentProcessState, ProcessStatus, VerificationResult
 from src.process.graph import GATES, TRANSITIONS, Limits, Step
 from src.process.steps import HumanApprovalStep
 from src.safe_text import printable
 
-STEP_LABELS = {
-    Step.PLAN: "Planification",
-    Step.PLAN_APPROVAL: "Validation du plan",
-    Step.CODE: "Génération du code",
-    Step.WRITE_APPROVAL: "Validation de l'écriture",
-    Step.VERIFY: "Tests (pytest + ruff)",
-    Step.FINALIZE: "Écriture du fichier",
-}
 GATE_QUESTIONS = {
     "plan": "Valider ce plan ?",
     "write": "Écrire ce fichier puis lancer les tests ?",
@@ -38,19 +31,6 @@ def gate_question(state: AgentProcessState, limits: Limits) -> Text:
         )
     gate = "plan" if state.current_step == Step.PLAN_APPROVAL else "write"
     return Text(GATE_QUESTIONS[gate])
-
-
-TERMINAL_REASONS = {
-    "human_rejected": "refusé",
-    "max_iterations": "trop de demandes d'affinage",
-    "approval_expired": "validation expirée",
-    "fixes_exhausted": "les tests échouent encore après les corrections automatiques",  # runs before v2
-    "write_failed": "écriture refusée",
-    "budget_exceeded": "budget dépassé",
-    "invalid_llm_output": "réponse du modèle invalide",
-    "sandbox_unavailable": "exécution des tests impossible",
-    "llm_error": "erreur du modèle",
-}
 
 
 def user_message(text: str) -> Panel:

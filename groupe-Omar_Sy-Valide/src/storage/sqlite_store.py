@@ -160,6 +160,11 @@ class SqliteStore:
             )
         return [AgentProcessState.model_validate_json(r["state_json"]) for r in rows]
 
+    async def run_starts(self) -> dict[str, datetime]:
+        """When each run started (its first journal entry), in one query."""
+        rows = await self._fetch("SELECT run_id, MIN(ts) AS started FROM events GROUP BY run_id")
+        return {r["run_id"]: datetime.fromisoformat(r["started"]) for r in rows}
+
     # --- event journal (append-only) --------------------------------------------------------------------
 
     async def append_event(

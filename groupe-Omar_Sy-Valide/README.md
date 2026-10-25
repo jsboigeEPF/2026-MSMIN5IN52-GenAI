@@ -139,14 +139,19 @@ python -m src.cli credits                # consommation de la clé OpenRouter (l
 ### Tableau de bord
 
 ```bash
-streamlit run src/dashboard.py
+streamlit run src/dashboard.py     # http://127.0.0.1:8501
 ```
 
-Liste des runs, graphe du processus tracé depuis la table de transitions (étape courante surlignée, étapes
-parcourues en bleu, issue finale en vert ou rouge), plan et diff, sortie de vérification, journal
-d'exécution, historique des décisions, coût et temps (calcul et attente humaine séparés). Les boutons
-**Approuver / Réviser / Rejeter** agissent sur la porte en attente (plan ou écriture) et enregistrent la
-décision avec le nom de l'évaluateur. Chaque rafraîchissement expire les approbations dépassées.
+- **Runs reconnaissables** : « 25/10 19:35 · cuisine_rag · début de la tâche · Échoué » au lieu d'un
+  identifiant, avec des filtres par projet et par statut (en français).
+- **Un run en un coup d'œil** : la tâche en titre, le statut expliqué en une phrase (ce qui s'est passé, et
+  si ton dossier a été modifié), puis le coût, le temps machine et l'attente humaine.
+- **Déroulé** : une frise lisible (tâche reçue, plan proposé, ta décision, code proposé, tests, fichier
+  écrit…), avec le plan, le diff ou la sortie des tests dépliables.
+- **Décider** : sur un run en attente, les mêmes réponses que dans l'agent (Oui, Non, Affiner, et
+  « Écrire quand même » après 10 corrections ratées). Ton login est prérempli.
+- Les onglets « Graphe » (tracé depuis la table de transitions) et « Données brutes » (journal, décisions,
+  mesures, identifiant) gardent la vue technique. Chaque rafraîchissement expire les validations dépassées.
 
 Modèles utilisés pour le run réel (à renseigner dans `.env`, autorisés par la clé du cours) :
 `PLANNER_MODEL=qwen/qwen3.8-flash`, `CODER_MODEL=deepseek/deepseek-v4.1-flash`,
