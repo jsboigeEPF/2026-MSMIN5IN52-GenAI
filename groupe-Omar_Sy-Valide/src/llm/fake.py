@@ -68,4 +68,7 @@ class FakeLLM:
             content = ErrorSummary(summary=request.user[: self.summary_chars]).model_dump_json()
         else:
             raise FakeScriptExhaustedError(f"no scripted response left for '{request.service_id}'")
+        if request.stream is not None:  # same contract as the live backend: the reply in pieces
+            for start in range(0, len(content), 16):
+                request.stream.token(content[start : start + 16])
         return ChatResponse(content, self.usage.model_copy(update={"model_id": f"mock/{request.service_id}"}))

@@ -7,11 +7,11 @@ opens one `llm.<service_id>` span per call, in live and mock mode alike (SPEC §
 import hashlib
 import json
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Generic, Protocol, TypeVar, cast
 
 import openai
-from openai.types.chat import ChatCompletion
+from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from opentelemetry import trace
 from opentelemetry.trace import Tracer
 from pydantic import BaseModel, ValidationError
@@ -52,6 +52,15 @@ class ChatRequest:
     system: str
     user: str
     output_type: type[BaseModel]
+    stream: "TokenStream | None" = field(default=None, compare=False)  # live tokens, not part of the prompt
+
+
+class TokenStream(Protocol):
+    """Receives a reply while it is generated (the interactive agent shows it live)."""
+
+    def start(self, service_id: str) -> None: ...
+
+    def token(self, text: str, reasoning: bool = False) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -144,6 +153,8 @@ class OpenRouterBackend:
             },
         )
         try:
+            if request.stream is not None:
+                return await self._stream(service, history, settings, request.stream)
             message = await service.get_chat_message_content(history, settings)
         except (ServiceResponseException, openai.APIError) as exc:
             reason = _provider_reason(exc)
@@ -154,9 +165,39 @@ class OpenRouterBackend:
             content=message.content, usage=_usage_from(message.inner_content, service.ai_model_id)
         )
 
+    @staticmethod
+    async def _stream(
+        service: ChatCompletionClientBase,
+        history: ChatHistory,
+        settings: OpenAIChatPromptExecutionSettings,
+        stream: TokenStream,
+    ) -> ChatResponse:
+        """Same request, streamed: tokens (and reasoning, for thinking models) go to `stream` as they come;
+        the usage and cost arrive in the last chunk."""
+        parts: list[str] = []
+        usage = LLMUsage(model_id=service.ai_model_id)
+        async for chunk in service.get_streaming_chat_message_content(history, settings):
+            if chunk is None:
+                continue
+            inner = chunk.inner_content
+            if isinstance(inner, ChatCompletionChunk):
+                if inner.usage is not None:
+                    usage = _usage_from(inner, service.ai_model_id)
+                for choice in inner.choices:
+                    reasoning = (choice.delta.model_extra or {}).get("reasoning")
+                    if isinstance(reasoning, str) and reasoning:
+                        stream.token(reasoning, reasoning=True)
+            text = str(chunk.content or "")
+            if text:
+                parts.append(text)
+                stream.token(text)
+        if not parts:
+            raise LLMError(f"{settings.service_id}: empty response")
+        return ChatResponse(content="".join(parts), usage=usage)
+
 
 def _usage_from(inner: object, fallback_model: str) -> LLMUsage:
-    if not isinstance(inner, ChatCompletion) or inner.usage is None:
+    if not isinstance(inner, ChatCompletion | ChatCompletionChunk) or inner.usage is None:
         return LLMUsage(model_id=fallback_model)
     extra = inner.usage.model_extra or {}
     return LLMUsage(
@@ -194,8 +235,9 @@ class LLMClient:
         system: str,
         user: str,
         output_type: type[T],
+        stream: TokenStream | None = None,
     ) -> LLMResult[T]:
-        request = ChatRequest(service_id, system, user, output_type)
+        request = ChatRequest(service_id, system, user, output_type, stream)
         key = (run_id, step, iteration, prompt_hash(request))
         cached = await self.store.get_llm_cache(*key)
         if cached is not None:
@@ -217,6 +259,8 @@ class LLMClient:
                     "Reply with a single JSON object that matches the schema.",
                 )
             )
+            if stream is not None:
+                stream.start(service_id)  # a retry starts a fresh reply on screen
             response = await self._invoke(attempt_request)
             usage = usage + response.usage
             try:

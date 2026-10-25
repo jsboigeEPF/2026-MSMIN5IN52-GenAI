@@ -127,3 +127,30 @@ def sidebar(state: AgentProcessState | None, visited: set[str], cost_eur: float)
         out.append(f" affinages {state.revision_iteration} · corrections {state.fix_iteration}\n")
         out.append(f" coût {cost_eur:.5f} €\n")
     return out
+
+
+STREAM_TITLES = {
+    "planner": "Omar prépare le plan",
+    "coder": "Omar écrit le code",
+    "summarizer": "Omar résume l'erreur",
+}
+_JSON_ESCAPES = (("\\\\", "\x00"), ("\\n", "\n"), ("\\t", "    "), ('\\"', '"'), ("\x00", "\\"))
+
+
+def _readable(raw: str) -> str:
+    """The reply is a JSON object being generated: show its strings as text (code keeps its lines)."""
+    for escaped, plain in _JSON_ESCAPES:
+        raw = raw.replace(escaped, plain)
+    return raw
+
+
+def live_panel(service_id: str, text: str, reasoning: str, max_lines: int = 30) -> Panel:
+    """The reply as it streams in: the tail of the model's reasoning (thinking models), then of its answer."""
+    parts: list[RenderableType] = []
+    if reasoning:
+        thought = printable(reasoning).splitlines()[-4:]
+        parts.append(Text("\n".join(thought), style="dim italic"))
+    body = printable(_readable(text)).splitlines()[-max_lines:]
+    parts.append(Text("\n".join(body) or "...", style="default"))
+    title = f"{STREAM_TITLES.get(service_id, service_id)} (en direct)"
+    return Panel(Group(*parts), title=Text(title), title_align="left", border_style="magenta")

@@ -12,6 +12,7 @@ import argparse
 import getpass
 import io
 import logging
+import time
 import uuid
 from contextlib import AsyncExitStack
 from pathlib import Path
@@ -72,6 +73,49 @@ def find_repo(path: Path) -> Path:
     return top
 
 
+class LiveReply:
+    """Shows an LLM reply while it is generated, in one block that the final result then replaces."""
+
+    REFRESH_SEC = 0.08  # repaint at most ~12 times per second, however fast the tokens come
+
+    def __init__(self, app: "OmarApp") -> None:
+        self.app = app
+        self.widget: Static | None = None
+        self.service_id = ""
+        self.text = ""
+        self.reasoning = ""
+        self._painted = 0.0
+
+    def start(self, service_id: str) -> None:
+        self.end()
+        self.service_id, self.text, self.reasoning = service_id, "", ""
+        self.widget = Static(render.live_panel(service_id, "", ""), classes="live")
+        chat = self.app.query_one("#chat", VerticalScroll)
+        chat.mount(self.widget)
+        chat.scroll_end(animate=False)
+
+    def token(self, text: str, reasoning: bool = False) -> None:
+        if self.widget is None:
+            self.start(self.service_id or "llm")
+        if reasoning:
+            self.reasoning += text
+        else:
+            self.text += text
+        if time.monotonic() - self._painted >= self.REFRESH_SEC:
+            self.paint()
+
+    def paint(self) -> None:
+        if self.widget is not None:
+            self.widget.update(render.live_panel(self.service_id, self.text, self.reasoning))
+            self.app.query_one("#chat", VerticalScroll).scroll_end(animate=False)
+            self._painted = time.monotonic()
+
+    def end(self) -> None:
+        if self.widget is not None:
+            self.widget.remove()
+            self.widget = None
+
+
 def _login() -> str:
     try:
         return getpass.getuser() or "local-user"
@@ -122,6 +166,7 @@ class OmarApp(App[None]):
         self.busy = False
         self.refining = False
         self._stack = AsyncExitStack()
+        self.live = LiveReply(self)
 
     # --- layout ------------------------------------------------------------------------------------------
 
@@ -149,6 +194,7 @@ class OmarApp(App[None]):
             self.error(f"{exc}\nRenseigne la clé et les modèles dans .env (voir .env.example).")
             return
         self.runner.on_event = self._on_engine_event
+        self.runner.ctx.stream = self.live
         self.set_repo(self.repo_arg or Path.cwd())
         self.refresh_sidebar()
         self.query_one("#prompt", Input).focus()
@@ -193,6 +239,8 @@ class OmarApp(App[None]):
     ) -> None:
         if state.run_id != self.run_id:
             return  # e.g. the expiry sweep closing an older run
+        if event_type in ("step_completed", "step_failed"):
+            self.live.end()  # the step's result replaces the live reply
         self.state = state
         if event_type == "step_completed":
             self.visited.add(step)
@@ -357,6 +405,7 @@ class OmarApp(App[None]):
                 run = f" — reprends avec /resume {self.state.run_id}" if self.state else ""
                 self.error(f"erreur inattendue : {type(exc).__name__}: {exc}{run}")
             finally:
+                self.live.end()
                 self.busy = False
                 self.refresh_bindings()
 

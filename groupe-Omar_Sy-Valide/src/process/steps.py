@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from src.clock import Clock
 from src.config import Settings
-from src.llm.client import LLMClient, LLMError, LLMUsage, StructuredOutputError
+from src.llm.client import LLMClient, LLMError, LLMUsage, StructuredOutputError, TokenStream
 from src.models.state import (
     AgentProcessState,
     ApprovalDecision,
@@ -47,6 +47,7 @@ class StepContext:
     settings: Settings
     clock: Clock
     fault_hook: Callable[[str], None] = _no_fault  # tests raise here to simulate a crash at a known point
+    stream: TokenStream | None = None  # live tokens of the LLM calls (the interactive agent shows them)
     inspector: CodeInspector = field(default_factory=CodeInspector)
     patch: PatchEngine = field(default_factory=PatchEngine)
 
@@ -170,6 +171,7 @@ class PlanStep:
             system=PLANNER_SYSTEM.format(schema=_schema(PlanOutput)),
             user="\n\n".join(parts),
             output_type=PlanOutput,
+            stream=ctx.stream,
         )
         if not state.file_locked:
             chosen = Path(result.output.target_file.strip()).as_posix()
@@ -237,6 +239,7 @@ class CodeGenerationStep:
             system=CODER_SYSTEM.format(schema=_schema(CodePatch)),
             user="\n\n".join(parts),
             output_type=CodePatch,
+            stream=ctx.stream,
         )
         ctx.fault_hook("code.after_llm")
         state.generated_code = result.output.new_content
@@ -275,6 +278,7 @@ class VerificationStep:
                 system=SUMMARIZER_SYSTEM.format(schema=_schema(ErrorSummary)),
                 user="\n\n".join(f"{name} output:\n{out}" for name, out in failing if out),
                 output_type=ErrorSummary,
+                stream=ctx.stream,
             )
             usage, summary = result.usage, result.output.summary
             state.fix_iteration += 1

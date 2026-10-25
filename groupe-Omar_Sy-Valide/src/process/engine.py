@@ -25,7 +25,14 @@ from pydantic import BaseModel, Field
 
 from src.clock import Clock
 from src.config import Settings
-from src.llm.client import BudgetExceededError, LLMClient, LLMError, LLMUsage, StructuredOutputError
+from src.llm.client import (
+    BudgetExceededError,
+    LLMClient,
+    LLMError,
+    LLMUsage,
+    StructuredOutputError,
+    TokenStream,
+)
 from src.models.state import (
     TERMINAL_STATUSES,
     AgentProcessState,
@@ -107,6 +114,7 @@ class ProcessRunner:
         tracer: Tracer | None = None,
         fault_hook: Callable[[str], None] | None = None,
         on_event: EventHook | None = None,
+        stream: TokenStream | None = None,
     ) -> None:
         self.store = store
         self.on_event = on_event
@@ -116,6 +124,7 @@ class ProcessRunner:
         self.ctx = StepContext(llm=llm, sandbox=sandbox, settings=settings, clock=clock)
         if fault_hook is not None:
             self.ctx.fault_hook = fault_hook
+        self.ctx.stream = stream
         self.handlers: dict[Step, StepHandler] = {
             Step.PLAN: PlanStep(),
             Step.CODE: CodeGenerationStep(),

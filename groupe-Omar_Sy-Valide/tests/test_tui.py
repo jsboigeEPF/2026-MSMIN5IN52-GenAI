@@ -224,3 +224,31 @@ async def test_after_the_fixes_run_out_oui_means_write_anyway(
         assert "> Écrire quand même" in transcript(app)
         assert "alors que les tests échouent" in transcript(app)
     assert (git_repo / "calc.py").read_text() == bad["new_content"]
+
+
+async def test_the_reply_streams_live_then_gives_way_to_the_result(git_repo: Path, tmp_path: Path) -> None:
+    app = OmarApp(git_repo, db=tmp_path / "t.db", llm_script=script(tmp_path))
+    async with app.run_test(size=(140, 50)) as pilot:
+        seen: list[str] = []
+        paint = app.live.paint
+
+        def spy() -> None:
+            paint()
+            if app.live.widget is not None:
+                seen.append(app.live.text)
+
+        app.live.paint = spy  # type: ignore[method-assign]
+        app.live.REFRESH_SEC = 0.0  # repaint on every token
+        await type_task(app, pilot, "Corrige add()")
+        assert seen and seen[-1] == json.dumps(PLAN)  # the planner's reply, piece by piece
+        assert len(seen) > 1 and app.live.widget is None  # then removed: the plan panel replaces it
+        assert not app.query(".live")
+
+
+def test_live_panel_shows_code_as_text_and_neutralises_escapes() -> None:
+    raw = '{"new_content": "def add(a, b):\\n    return a + b\\n# \\u001b' + "\x1b[2K" + '", "rat'
+    out = io.StringIO()
+    Console(file=out, width=100, force_terminal=True).print(render.live_panel("coder", raw, "hmm"))
+    text = out.getvalue()
+    assert "Omar écrit le code (en direct)" in text and "    return a + b" in text
+    assert "\x1b[2K" not in text and "\\x1b[2K" in text

@@ -125,6 +125,9 @@ Dans l'interface :
 - à chaque validation, **o** = Oui, **n** = Non, **a** = Affiner (tu écris ce qu'il faut changer, Entrée) ;
 - `/runs`, `/resume <id>`, `/undo`, `/repo <chemin>`, `/clear`, `/help`, `/quit` (ou Ctrl+Q).
 
+Les réponses du modèle s'affichent **en direct** pendant leur génération (plan, code, résumé d'erreur, et le
+raisonnement des modèles qui en produisent), puis laissent la place au résultat validé.
+
 La colonne de droite suit le graphe en direct : étape courante, étapes passées, boucles, compteurs et coût.
 Chaque décision est enregistrée avec ton login comme évaluateur. L'affichage se remet en page quand on
 redimensionne le terminal ; les journaux des bibliothèques vont dans `omar.log` et pas à l'écran.
@@ -188,7 +191,7 @@ ruff check src tests
 pyright src      # mode strict
 ```
 
-201 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
+205 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
 
 - **Scénarios de bout en bout** (`tests/test_scenarios.py`, SPEC §8) : nominal (fichier choisi par l'IA),
   rejet à chaque porte, expiration, reprise en attente de validation, crash au milieu d'une étape (réponse
