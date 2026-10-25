@@ -194,6 +194,7 @@ class ProcessRunner:
         iteration = state.loop_iteration
         started, t0 = self.clock.now(), time.perf_counter()
         state.status = STEP_STATUS[step]
+        await self._save(state)  # status shows the running step, also if it crashes
         await self._event(state, step, "step_started", iteration)
         with step_span(self.tracer, state.run_id, step, iteration) as span:
             try:
