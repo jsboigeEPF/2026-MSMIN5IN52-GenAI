@@ -41,6 +41,9 @@ _ENV_ALLOWLIST = (
 )
 _MAX_OUTPUT_CHARS = 20_000
 _PYTEST_ARGS = ("-m", "pytest", "-q", "-p", "no:cacheprovider")
+# EXE001/EXE002 check the executable bit, which the agent neither generates nor commits, and which
+# Docker Desktop bind mounts report as set on every file.
+_RUFF_ARGS = ("check", "--no-cache", "--extend-ignore", "EXE001,EXE002")
 
 
 def docker_available(image: str) -> bool:
@@ -84,10 +87,10 @@ class SandboxRunner:
     async def run_linter(self, worktree_path: Path, file: str) -> tuple[bool, str]:
         target = str(PurePosixPath(Path(file).as_posix()))
         if self.mode == "docker":
-            return await self._run_docker(worktree_path, ["ruff", "check", "--no-cache", target])
+            return await self._run_docker(worktree_path, ["ruff", *_RUFF_ARGS, target])
         logger.warning(_HOST_WARNING)
         return await self._run(
-            [sys.executable, "-m", "ruff", "check", "--no-cache", target],
+            [sys.executable, "-m", "ruff", *_RUFF_ARGS, target],
             cwd=worktree_path,
             env=_sandbox_env(),
         )

@@ -257,6 +257,19 @@ async def test_docker_sandbox_cannot_modify_the_worktree(git_repo: Path) -> None
     assert (git_repo / "calc.py").read_text() == FIXED_CALC
 
 
+@pytest.mark.skipif(
+    not sandbox.docker_available("mini-opencode-sandbox:latest"),
+    reason="Docker daemon or sandbox image unavailable (docker build -t mini-opencode-sandbox sandbox/)",
+)
+async def test_docker_linter_ignores_permission_bits_of_the_mount(git_repo: Path) -> None:
+    # Docker Desktop bind mounts make every file look executable (0777); ruff's EXE rules would
+    # then flag clean code, and the coder would "fix" it by adding a shebang (seen in a live run).
+    (git_repo / "calc.py").write_text(FIXED_CALC)
+    runner = SandboxRunner(mode="docker", timeout_sec=120, image="mini-opencode-sandbox:latest")
+    passed, output = await runner.run_linter(git_repo, "calc.py")
+    assert passed, output
+
+
 # --- GitOps -------------------------------------------------------------------------------------------
 
 
