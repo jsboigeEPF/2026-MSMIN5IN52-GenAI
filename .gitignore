@@ -1,0 +1,5 @@
+__pycache__/
+*.py[cod]
+.venv/
+sandbox/.mcp_audit.jsonl
+sandbox/.mcp-tmp-*

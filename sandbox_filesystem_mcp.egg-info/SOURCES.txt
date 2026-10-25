@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+server.py
+sandbox_filesystem_mcp.egg-info/PKG-INFO
+sandbox_filesystem_mcp.egg-info/SOURCES.txt
+sandbox_filesystem_mcp.egg-info/dependency_links.txt
+sandbox_filesystem_mcp.egg-info/requires.txt
+sandbox_filesystem_mcp.egg-info/top_level.txt
