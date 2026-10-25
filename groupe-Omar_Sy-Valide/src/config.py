@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     # "auto" = docker when available, subprocess otherwise (resolved by the sandbox).
     SANDBOX_MODE: Literal["auto", "docker", "subprocess"] = "auto"
     SANDBOX_TIMEOUT_SEC: int = Field(default=120, gt=0)
+    SANDBOX_IMAGE: str = "mini-opencode-sandbox:latest"  # built from sandbox/Dockerfile
 
     def usd_to_eur(self, usd: float) -> float:
         return usd * self.USD_EUR_RATE

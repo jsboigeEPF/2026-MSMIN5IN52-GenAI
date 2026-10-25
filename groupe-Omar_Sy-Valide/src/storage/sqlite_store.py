@@ -235,6 +235,11 @@ class SqliteStore:
             (run_id, step, iteration, prompt_hash, response_json, usage_json),
         )
 
+    async def llm_cost_usd(self, run_id: str) -> float:
+        """Total cost of every paid LLM call of the run (each paid response is cached exactly once)."""
+        rows = await self._fetch("SELECT usage_json FROM llm_cache WHERE run_id = ?", (run_id,))
+        return sum(float(json.loads(r["usage_json"]).get("cost_usd", 0.0)) for r in rows)
+
     # --- metrics ------------------------------------------------------------------------------------------
 
     async def append_metric(self, run_id: str, m: StepMetrics) -> None:

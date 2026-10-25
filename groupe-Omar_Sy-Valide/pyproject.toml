@@ -10,6 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
     "semantic-kernel==1.45.0",
     "openai==3.37.0",
+    "httpx2==2.16.0",  # openai 3.x HTTP client; used directly to inject test transports
     "pydantic==2.13.5",
     "pydantic-settings==2.16.1",
     "aiosqlite==0.22.1",

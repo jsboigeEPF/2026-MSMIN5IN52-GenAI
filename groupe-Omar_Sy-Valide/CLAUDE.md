@@ -20,6 +20,7 @@ ruff check src tests
 pyright src
 python -m src.cli --help       # start | status | decide | resume | sweep | report  (--mock-llm)
 streamlit run src/dashboard.py # Phase 5
+docker build -t mini-opencode-sandbox sandbox/   # once, for SANDBOX_MODE=docker
 ```
 
 ## Architecture (5 lines)
@@ -40,6 +41,9 @@ streamlit run src/dashboard.py # Phase 5
 - No secrets in commits, logs, traces or test output. Only `.env.example` (no values) is committed.
 - No placeholder code (`# TODO`, bare `pass`, `NotImplementedError`) on the nominal path.
 - Verify `semantic_kernel` imports against the installed version (Context7 or package inspection).
+  SK 1.45 gotchas: a function-invocation filter's 2nd parameter must be named `next`; native-function
+  params must be typed `Any` to receive custom objects; errors come wrapped in `KernelInvokeException`.
+- `openai` 3.x uses `httpx2` (not `httpx`); inject `httpx2.MockTransport` to test live paths offline.
 
 ## Git conventions
 - One branch per phase (`phase-1-foundations`, …), PR reviewed by the teammate. Never commit to `main`.
