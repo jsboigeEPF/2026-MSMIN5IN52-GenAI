@@ -73,13 +73,13 @@ class LLMResult(Generic[T]):
 
 
 class LLMError(RuntimeError):
-    pass
+    def __init__(self, message: str, usage: LLMUsage | None = None) -> None:
+        super().__init__(message)
+        self.usage = usage or LLMUsage()  # cost already paid when the error is raised, for the step metrics
 
 
 class StructuredOutputError(LLMError):
-    def __init__(self, message: str, usage: LLMUsage) -> None:
-        super().__init__(message)
-        self.usage = usage  # cost of the failed attempts, to be recorded by the caller
+    pass
 
 
 class BudgetExceededError(LLMError):
@@ -176,7 +176,7 @@ class LLMClient:
                 cached=True,
             )
 
-        await self._check_budget(run_id)
+        await self._check_budget(run_id, LLMUsage())
         usage, error = LLMUsage(), ""
         for attempt in range(2):
             attempt_request = (
@@ -198,18 +198,19 @@ class LLMClient:
             await self.store.put_llm_cache(
                 *key, response_json=output.model_dump_json(), usage_json=usage.model_dump_json()
             )
-            await self._check_budget(run_id)
+            await self._check_budget(run_id, usage)
             return LLMResult(output, usage, cached=False)
         raise StructuredOutputError(
             f"{service_id}: invalid structured output after one retry: {error}", usage
         )
 
-    async def _check_budget(self, run_id: str) -> None:
+    async def _check_budget(self, run_id: str, usage: LLMUsage) -> None:
         spent_eur = self.settings.usd_to_eur(await self.store.llm_cost_usd(run_id))
         if spent_eur > self.settings.MAX_COST_EUR_PER_RUN:
             raise BudgetExceededError(
                 f"run {run_id} spent {spent_eur:.4f} EUR, "
-                f"above MAX_COST_EUR_PER_RUN={self.settings.MAX_COST_EUR_PER_RUN}"
+                f"above MAX_COST_EUR_PER_RUN={self.settings.MAX_COST_EUR_PER_RUN}",
+                usage,
             )
 
     async def _invoke(self, request: ChatRequest) -> ChatResponse:

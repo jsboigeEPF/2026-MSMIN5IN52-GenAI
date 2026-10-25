@@ -1,4 +1,9 @@
-"""Domain models (SPEC §3). Additions to the spec: `scenario` label, `TERMINAL_STATUSES`, `ErrorSummary`."""
+"""Domain models (SPEC §3).
+
+Additions to the spec: `scenario` label, `TERMINAL_STATUSES`, `ErrorSummary`, and in the state
+`loop_iteration` (one per pass through the graph, keys checkpoints and the LLM cache) and `awaiting_since`
+(start of the human wait).
+"""
 
 from datetime import datetime
 from enum import StrEnum
@@ -97,7 +102,9 @@ class AgentProcessState(BaseModel):
     verification: VerificationResult | None = None
     revision_iteration: int = 0  # loops triggered by human "revise"
     fix_iteration: int = 0  # loops triggered by failed verification
+    loop_iteration: int = 0  # +1 on every feedback edge (verify->code, approval->plan)
     human_feedback: str | None = None
+    awaiting_since: datetime | None = None
     approval_deadline: datetime | None = None
     git_commit_hash: str | None = None
     compensation: CompensationRecord | None = None
