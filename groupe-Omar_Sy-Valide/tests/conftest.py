@@ -5,14 +5,21 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from semantic_kernel import Kernel
 
 from src.clock import FakeClock
+from src.config import Settings
+from src.llm.client import LLMClient
+from src.llm.fake import FakeLLM
 from src.models.state import AgentProcessState
+from src.process.engine import ProcessRunner
 from src.storage.sqlite_store import SqliteStore
+from src.tools.sandbox import SandboxRunner
 
 T0 = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
 
 StateFactory = Callable[..., AgentProcessState]
+RunnerFactory = Callable[..., ProcessRunner]
 
 
 @pytest.fixture
@@ -71,3 +78,24 @@ def git_repo(tmp_path: Path) -> Path:
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "initial")
     return repo
+
+
+@pytest.fixture
+def make_runner(store: SqliteStore, clock: FakeClock) -> RunnerFactory:
+    """A fresh ProcessRunner over the shared store: building a second one simulates a process restart.
+
+    Tests run the sandbox in explicit subprocess mode so they do not need Docker.
+    """
+
+    def factory(fake: FakeLLM, fault_hook: Callable[[str], None] | None = None, **cfg: Any) -> ProcessRunner:
+        settings = Settings(_env_file=None, **{"SANDBOX_MODE": "subprocess", **cfg})
+        return ProcessRunner(
+            store=store,
+            llm=LLMClient(Kernel(), fake, store, settings),
+            sandbox=SandboxRunner("subprocess", settings.SANDBOX_TIMEOUT_SEC, settings.SANDBOX_IMAGE),
+            settings=settings,
+            clock=clock,
+            fault_hook=fault_hook,
+        )
+
+    return factory
