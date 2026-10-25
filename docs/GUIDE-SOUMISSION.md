@@ -2,7 +2,7 @@
 
 ## 1. Réserver un sujet
 
-Choisissez un sujet du [catalogue](CATALOGUE.md) ou soumettez une proposition libre avant de commencer. Deux groupes ne peuvent pas traiter le même sujet. Une proposition libre doit respecter les mêmes exigences de faisabilité, de mesure et de différenciation que le catalogue.
+Choisissez un sujet du [catalogue](CATALOGUE.md) ou soumettez une proposition libre avant de commencer, puis inscrivez le groupe et ses vœux dans le classeur d'inscription du cours (lien transmis par l'enseignant) : c'est lui qui fait foi pour l'attribution. Deux groupes ne peuvent pas traiter le même sujet. Une proposition libre doit respecter les mêmes exigences de faisabilité, de mesure et de différenciation que le catalogue.
 
 ## 2. Préparer le fork
 
@@ -17,7 +17,6 @@ Ne renommez, ne déplacez et ne supprimez aucun fichier appartenant au dépôt o
 ## 3. Travailler progressivement
 
 - Commitez régulièrement avec des messages décrivant le changement.
-- Reliez la PR finale à l'issue de réservation du sujet.
 - Ouvrez une PR brouillon ou publiez un point d'étape assez tôt pour rendre la progression visible.
 - Répartissez les tâches et relisez le code des autres membres.
 - Quand le sujet s'y prête, comparez à une approche plus simple pour montrer l'apport du système GenAI.
