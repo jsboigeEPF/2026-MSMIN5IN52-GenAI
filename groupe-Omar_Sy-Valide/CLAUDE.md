@@ -22,7 +22,8 @@ streamlit run src/dashboard.py # Phase 5
 
 ## Architecture (5 lines)
 1. `process/graph.py`: transition table `(step, event) -> step`, the single source of truth for routing.
-2. `process/engine.py`: `ProcessRunner` (start / resume / decide / sweep_expired), persists state after each step.
+2. `process/engine.py`: in-house `ProcessRunner` (start / resume / decide / sweep_expired), persists state after
+   each step. Not the SK Process Framework: see `docs/phase0_sk_spike.md` (decision B).
 3. `process/steps.py`: plan → code → verify → approval → finalize; `compensation.py` discards or reverts.
 4. `llm/`: structured-output calls via SK services `planner` / `coder` / `summarizer`, LLM cache, cost; `fake.py` for mock.
 5. `tools/`: deterministic git worktree, AST inspector, patch, sandbox (docker|subprocess), git ops; `storage/` SQLite journal.

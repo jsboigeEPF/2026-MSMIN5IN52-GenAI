@@ -23,9 +23,12 @@ La spécification complète est dans [docs/SPEC.md](docs/SPEC.md).
 ## Architecture
 
 Graphe : `plan → code → verify → approval → finalize`, avec boucle d'auto-correction (verify → code), boucle de
-révision humaine (approval → plan) et compensation terminale. Détail dans [docs/SPEC.md](docs/SPEC.md) §5 ;
-schéma et choix du moteur (SK Process Framework ou moteur maison) documentés à l'issue de la phase 0
-(`docs/phase0_sk_spike.md`).
+révision humaine (approval → plan) et compensation terminale. Détail dans [docs/SPEC.md](docs/SPEC.md) §5.
+
+Moteur : boucle asynchrone maison pilotée par la table de transitions. Le SK Process Framework a été évalué en
+phase 0 ([docs/phase0_sk_spike.md](docs/phase0_sk_spike.md)) : suspension et reprise possibles, mais sans
+point de sauvegarde par étape et avec des exceptions d'étape silencieusement absorbées. Semantic Kernel reste
+utilisé pour les services LLM et les filtres de traçage.
 
 ## Installation
 
