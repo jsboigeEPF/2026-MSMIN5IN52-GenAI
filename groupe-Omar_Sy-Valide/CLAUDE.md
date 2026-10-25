@@ -18,19 +18,21 @@ python -m venv .venv && .venv/Scripts/python -m pip install -e ".[dev]"   # once
 pytest                         # all tests, mock LLM only
 ruff check src tests
 pyright src
-python -m src.cli --help       # start | status | decide | resume | sweep | report  (--mock-llm)
+python -m src.cli --help       # start | status | decide | resume | undo | sweep | report  (--mock-llm)
 streamlit run src/dashboard.py # Phase 5
-docker build -t mini-opencode-sandbox sandbox/   # once; SANDBOX_MODE=auto fails closed without it
+docker build -t mini-opencode-sandbox sandbox/   # optional, only for SANDBOX_MODE=docker
 ```
 
 ## Architecture (5 lines)
 1. `process/graph.py`: `TRANSITIONS` `(step, event, guard) -> step | Terminal`, the only routing logic.
 2. `process/engine.py`: in-house `ProcessRunner` (start/status/resume/decide/sweep_expired; SK spike: decision B).
-   Persisted `current_step` = next step to run. `LLMError`/`SandboxUnavailableError` -> FAILED + compensation;
+   Suspends on both gates (`graph.GATES`). Persisted `current_step` = next step to run. `LLMError`/`SandboxUnavailableError` -> FAILED + compensation;
    any other exception is a crash and stays resumable. `loop_iteration` keys checkpoints and the LLM cache.
-3. `process/steps.py`: plan → code → verify → approval → finalize; `compensation.py` discards or reverts.
+3. `process/steps.py`: plan → plan_approval → code → write_approval → verify → finalize (writes the user's file,
+   no commit; `undo` restores it); `compensation.py` discards the worktree. No code runs before the write gate.
 4. `llm/`: structured-output calls via SK services `planner` / `coder` / `summarizer`, LLM cache, cost; `fake.py` for mock.
-5. `tools/`: deterministic git worktree, AST inspector, patch, sandbox (docker|subprocess), git ops; `storage/` SQLite journal.
+5. `tools/`: deterministic git worktree, AST inspector, patch (diff/apply), sandbox (subprocess default |
+   docker), git helpers; `storage/` SQLite journal. `.env` and the default DB are anchored to the project dir.
 
 ## Non-negotiable rules
 - Graph transitions are code, never decided by an LLM. Tools are called by step code, never by the LLM.
