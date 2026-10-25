@@ -1,4 +1,4 @@
-"""Domain models (SPEC §3). Additions to the spec: `scenario` label and `TERMINAL_STATUSES`."""
+"""Domain models (SPEC §3). Additions to the spec: `scenario` label, `TERMINAL_STATUSES`, `ErrorSummary`."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -55,6 +55,10 @@ class CodePatch(BaseModel):  # structured LLM output of Step 2
 
 class PlanOutput(BaseModel):  # structured LLM output of Step 1
     steps: list[str]
+
+
+class ErrorSummary(BaseModel):  # structured LLM output of Step 3 (summarizer)
+    summary: str
 
 
 class ApprovalDecision(BaseModel):  # append-only audit record
