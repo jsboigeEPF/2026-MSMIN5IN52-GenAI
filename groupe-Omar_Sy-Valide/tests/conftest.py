@@ -87,11 +87,17 @@ def make_runner(store: SqliteStore, clock: FakeClock) -> RunnerFactory:
     Tests run the sandbox in explicit subprocess mode so they do not need Docker.
     """
 
-    def factory(fake: FakeLLM, fault_hook: Callable[[str], None] | None = None, **cfg: Any) -> ProcessRunner:
+    def factory(
+        fake: FakeLLM,
+        fault_hook: Callable[[str], None] | None = None,
+        on_store: SqliteStore | None = None,  # a separately opened store simulates a new process
+        **cfg: Any,
+    ) -> ProcessRunner:
         settings = Settings(_env_file=None, **{"SANDBOX_MODE": "subprocess", **cfg})
+        db = on_store or store
         return ProcessRunner(
-            store=store,
-            llm=LLMClient(Kernel(), fake, store, settings),
+            store=db,
+            llm=LLMClient(Kernel(), fake, db, settings),
             sandbox=SandboxRunner("subprocess", settings.SANDBOX_TIMEOUT_SEC, settings.SANDBOX_IMAGE),
             settings=settings,
             clock=clock,
