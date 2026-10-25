@@ -14,6 +14,8 @@ utilisent le transport MCP STDIO ; le projet n'expose pas de serveur HTTP public
 
 ## État d'avancement
 
+Suivi détaillé, checklist et décisions en attente : [`SUIVI.md`](SUIVI.md).
+
 ### Déjà réalisé
 
 - Serveur MCP STDIO dans `server.py`.
