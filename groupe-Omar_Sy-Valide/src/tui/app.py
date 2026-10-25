@@ -30,6 +30,7 @@ from textual.widgets import Button, Footer, Header, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from src.config import DEFAULT_DB, PROJECT_DIR, Settings
+from src.labels import status_label
 from src.llm.client import LLMProviderError
 from src.llm.fake import FakeScriptExhaustedError
 from src.models.state import TERMINAL_STATUSES, AgentProcessState, ProcessStatus
@@ -41,6 +42,7 @@ from src.safe_text import printable
 from src.tools.git_ops import GitError, list_files, run_git
 from src.tools.sandbox import SandboxUnavailableError
 from src.tui import render
+from src.tui.history import conversation
 from src.tui.mentions import insert_mention, match_files, mention_at, mentioned_files
 
 Action = Literal["approve", "revise", "reject", "write_anyway"]
@@ -337,17 +339,18 @@ class OmarApp(App[None]):
             return self.refining
         return True
 
-    async def show_state(self, state: AgentProcessState) -> None:
+    async def show_state(self, state: AgentProcessState, announce: bool = True) -> None:
+        """Show where the run stands. `announce=False` when its history was just replayed (no duplicate)."""
         self.state = state
         if self.runner is not None:
             usd = await self.runner.store.llm_cost_usd(state.run_id)
             self.cost_eur = self.runner.ctx.settings.usd_to_eur(usd)
         gate = self.pending_gate()
-        if gate == "plan":
+        if announce and gate == "plan":
             self.say(render.plan_panel(state))
-        elif gate == "write":
+        elif announce and gate == "write":
             self.say(render.diff_panel(state))
-        elif state.status in TERMINAL_STATUSES:
+        elif announce and state.status in TERMINAL_STATUSES:
             self.say(render.outcome_panel(state, self.cost_eur))
         self.show_gate(gate)
         self.refresh_sidebar()
@@ -600,11 +603,21 @@ class OmarApp(App[None]):
             self.error(str(exc))
             return
         self.run_id = run_id
-        events = await self.runner.store.list_events(run_id)
+        store = self.runner.store
+        events = await store.list_events(run_id)
         self.visited = {e.step for e in events if e.event_type == "step_completed"}
-        self.say(Text(f"Reprise du run {run_id} ({state.status.value})", style="bold"))
+        self.cost_eur = self.runner.ctx.settings.usd_to_eur(await store.llm_cost_usd(run_id))
+        self.say(Text(f"Reprise du run {run_id} ({status_label(state)}) : historique", style="bold"))
+        for item in conversation(
+            state,
+            events,
+            await store.list_approvals(run_id),
+            await store.llm_responses(run_id),
+            self.cost_eur,
+        ):
+            self.say(item)
         if state.status in TERMINAL_STATUSES or state.status is ProcessStatus.AWAITING_APPROVAL:
-            await self.show_state(state)
+            await self.show_state(state, announce=False)
         else:
             runner = self.runner
             self.state = state

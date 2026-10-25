@@ -258,6 +258,13 @@ class SqliteStore:
             (run_id, step, iteration, prompt_hash, response_json, usage_json),
         )
 
+    async def llm_responses(self, run_id: str) -> dict[tuple[str, int], str]:
+        """Every validated LLM reply of a run, by (step, iteration): the run's history, plan by plan."""
+        rows = await self._fetch(
+            "SELECT step, iteration, response_json FROM llm_cache WHERE run_id = ? ORDER BY rowid", (run_id,)
+        )
+        return {(r["step"], r["iteration"]): r["response_json"] for r in rows}
+
     async def llm_cost_usd(self, run_id: str) -> float:
         """Total cost of every paid LLM call of the run (each paid response is cached exactly once)."""
         rows = await self._fetch("SELECT usage_json FROM llm_cache WHERE run_id = ?", (run_id,))

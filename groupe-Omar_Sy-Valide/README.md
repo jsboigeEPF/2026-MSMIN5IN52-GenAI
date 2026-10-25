@@ -126,7 +126,8 @@ Dans l'interface :
 - **@ pour citer un fichier** : une liste filtrée des fichiers du dépôt s'ouvre au-dessus de la saisie
   (↑/↓ pour choisir, Entrée ou Tab pour insérer, Échap pour fermer). Le premier fichier cité devient le
   fichier à modifier ; sans @, l'IA le choisit.
-- `/resume` reprend le dernier run du dépôt (ou `/resume <id>` un run précis), `/runs`, `/undo`,
+- `/resume` reprend le dernier run du dépôt (ou `/resume <id>` un run précis) et réaffiche toute sa
+  conversation : ta tâche, chaque plan et chaque diff proposés, tes réponses, les tests, l'issue ;, `/runs`, `/undo`,
   `/repo <chemin>`, `/clear`, `/help`, `/quit` (ou Ctrl+Q).
 
 Les réponses du modèle s'affichent **en direct** pendant leur génération (plan, code, résumé d'erreur, et le
@@ -195,7 +196,7 @@ ruff check src tests
 pyright src      # mode strict
 ```
 
-211 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
+212 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
 
 - **Scénarios de bout en bout** (`tests/test_scenarios.py`, SPEC §8) : nominal (fichier choisi par l'IA),
   rejet à chaque porte, expiration, reprise en attente de validation, crash au milieu d'une étape (réponse

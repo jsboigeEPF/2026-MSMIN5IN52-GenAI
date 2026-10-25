@@ -283,3 +283,36 @@ async def test_resume_without_id_picks_the_latest_run(git_repo: Path, tmp_path: 
         await type_task(app, pilot, "/resume")
         assert app.run_id == "new-2" and app.pending_gate() == "plan"
         assert "Reprise du run new-2" in transcript(app)
+
+
+async def test_resume_replays_the_whole_conversation_in_order(git_repo: Path, tmp_path: Path) -> None:
+    db, llm = tmp_path / "t.db", script(tmp_path, planner=2)
+    async with open_runner(db, drive=True, mock=True, script=llm) as runner:
+        run_id = await runner.start(
+            StartRequest(target_repo_path=str(git_repo), user_prompt="Corrige add()", run_id="h-1")
+        )
+        await runner.decide(run_id, DecisionRequest(action="revise", actor="a", comment="garde les types"))
+        await runner.decide(run_id, DecisionRequest(action="approve", actor="a"))
+        await runner.decide(run_id, DecisionRequest(action="approve", actor="a"))
+    app = OmarApp(git_repo, db=db, llm_script=llm)
+    async with app.run_test(size=(140, 50)) as pilot:
+        await type_task(app, pilot, "/resume h-1")
+        text = transcript(app)
+        order = [
+            "Corrige add()",
+            "Plan proposé",
+            "> Affiner : garde les types",
+            "Plan proposé",
+            "> Oui",
+            "+    return a + b",
+            "> Oui",
+            "Tests et lint : réussis",
+            "écrit dans ton dossier",
+        ]
+        positions, start = [], text.index("Reprise du run h-1")
+        for needle in order:
+            start = text.index(needle, start)
+            positions.append(start)
+            start += len(needle)
+        assert positions == sorted(positions)
+        assert text.count("écrit dans ton dossier") == 1  # the outcome is not shown twice
