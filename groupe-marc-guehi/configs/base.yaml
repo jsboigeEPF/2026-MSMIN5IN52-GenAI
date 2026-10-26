@@ -1,0 +1,107 @@
+audio:
+  sample_rate_in: 16000     # navigateur -> serveur (PCM16 mono)
+  sample_rate_out: 24000    # à confirmer selon le TTS
+vad:
+  threshold: 0.5
+  neg_threshold: 0.35
+  min_speech_ms: 96
+  end_silence_ms: 450       # fin de tour (à calibrer ; 600 ms dans la référence mesurée)
+  preroll_ms: 300
+  min_voiced_ms: 200
+  min_level_dbfs: -50       # sensibilité : trames plus faibles (bruit de fond, souffle) ignorées avant le VAD ; relever (ex. -40) en ambiance bruyante, baisser si la voix est coupée ; -120 = off
+session:
+  max_history_messages: 20
+  strict_after_s: 0.5       # après la fin de lecture : seuil VAD relevé (écho résiduel)
+  barge_in_min_speech_ms: 300   # parole continue requise pour interrompre l'agent
+  barge_in_min_prob: 0.6        # seuil VAD relevé tant que l'agent parle (anti-écho) ; 0,75 avant le 2026-10-24 (campagne : 0,5–0,6 détecte plus vite)
+  playback_margin_s: 0.05       # marge retirée à la durée jouée estimée par le serveur lors d'une interruption
+  carry_gap_ms: 150             # silence inséré entre l'audio repris d'un tour interrompu et la phrase suivante
+  failsafe_margin_s: 5.0        # marge ajoutée à la durée de l'audio avant de repasser en écoute sans accusé du client
+  interrupt_ack_timeout_s: 5.0  # un accusé `interrupted` du client plus tardif que cela est ignoré
+  strict_transitions: false     # true (tests) : une transition d'état illégale lève une erreur ; sinon elle est tracée (`state_illegal`)
+filler:
+  enabled: true
+  min_speech_ms: 0          # durée minimale de l'énoncé pour une accroche ; 0 = toujours (1800 évitait l'accroche sur « bonjour », « merci »)
+  texts:                    # neutres : choisies avant de connaître la question
+    - "Alors,"
+    - "Hmm, voyons."
+    - "Voyons voir."
+    - "Eh bien,"
+    - "Mmh, d'accord."
+    - "Ok, je réfléchis."
+    - "Bien sûr."
+    - "Hum, une seconde."
+    - "D'accord, alors,"
+    - "Bon, voyons ça."
+    - "Hmm, laisse-moi réfléchir un instant."
+    - "Alors, voyons un peu ça."
+  search_texts:             # secours de l'annonce parlée (« je regarde la météo à Lyon ») : jouées quand le LLM décide de chercher
+    - "Je regarde ça."
+    - "Une seconde, je cherche."
+    - "Je vérifie sur internet."
+    - "Laisse-moi regarder."
+  search_wait_after_s: 3.0  # si la recherche dure plus longtemps (et que la réponse n'a pas commencé) : une 2e phrase brève
+  search_wait_texts:
+    - "Encore un instant."
+    - "Je n'ai pas encore la réponse."
+    - "Ça arrive, un petit instant."
+llm:
+  timeout_s: 60             # délai réseau du flux LLM (connexion, lecture entre deux morceaux)
+  first_token_timeout_s: 8  # sans premier jeton (ou appel d'outil) après ce délai : bascule sur le modèle de secours (LLM_MODEL_ALT) ; 0 = off. Hypothèse : le TTFT mesuré est 0,3–1 s, pics à 6,5 s
+  max_tokens: 200
+  temperature: 0.6
+  system_prompt: >
+    Tu es un assistant vocal. Réponds en français, en phrases courtes (1 à 3),
+    sans markdown ni listes, adaptées à l'oral.
+  date_line: "Nous sommes le {date}."
+  filler_hint: " Tu viens de dire à voix haute « {} » : enchaîne directement avec la réponse, sans nouvelle formule d'attente ni salutation."  # ajouté au prompt après une accroche
+  search_hint: >            # ajouté au prompt si `search.enabled`
+    Tu as accès à internet via l'outil web_search. Ta mémoire est ancienne et peut être fausse : cherche d'abord, puis réponds,
+    dès que la question porte sur une personne réelle (sportif, artiste, élu, dirigeant), un club, une entreprise, un produit, un
+    lieu précis ou un événement, et pour tout ce qui change avec le temps (météo, actualité, scores, résultats, prix, horaires,
+    équipe ou poste actuel, sorties récentes). Si tu hésites entre répondre de mémoire et chercher, cherche. Ne cherche pas
+    pour la conversation courante (salutations, remerciements, reformulations) ni pour des connaissances stables
+    (mathématiques, définitions, grammaire, histoire ancienne). N'invente jamais un fait sur une personne ou un événement.
+    Une phrase d'attente (« je regarde ça ») est dite automatiquement pendant la recherche (renseigne `announce` : une phrase
+    très courte qui dit ce que tu cherches). Ne la répète pas et n'annonce pas que tu cherches : donne directement le résultat.
+stt:
+  timeout_s: 60             # durée maximale d'une tentative de transcription (doit être > 0 ; contrairement au LLM, 0 n'est pas « sans limite ») ; dépassée : STT de secours
+  language: fr
+  fallback_model: qwen/qwen3-asr-1.7b   # OpenRouter /audio/transcriptions, essayé si le Whisper de l'école échoue
+  fallback_to_text_after: 2             # échecs STT consécutifs (secours compris) avant de basculer en mode texte
+  ignore_phrases:                       # transcriptions ignorées (avec le vide, les annotations « [Musique] » et le texte sans mot) : hallucinations connues de Whisper sur du bruit (hypothèse, non mesurée ici) ; égalité exacte après normalisation
+    - Sous-titres réalisés par la communauté d'Amara.org
+    - Sous-titres par Amara.org
+    - Sous-titrage Société Radio-Canada
+    - Sous-titrage ST' 501
+    - Merci d'avoir regardé cette vidéo
+    - Merci d'avoir regardé
+    - Abonnez-vous à la chaîne
+    - Thanks for watching
+  speculative_ms: 200                   # STT lancé après ce silence, avant la fin de tour (annulé si la parole reprend) ; 0 = off
+search:                                 # accès internet : outil `web_search` appelé par le LLM (function calling)
+  enabled: true
+  max_results: 3
+  max_tokens: 250
+  timeout_s: 20
+  language: français                    # langue du résumé renvoyé par la recherche
+  force: true                           # tool_choice=required : web_search ou no_search (échappatoire) ; le prompt seul ne suffisait pas
+  skip_max_words: 0                     # énoncé de ce nombre de mots ou moins : pas de recherche forcée
+  skip_regex: "((bonjour|salut|coucou|merci|ok|okay|super|parfait|très bien|oui|non|d'accord|beaucoup|bien|au revoir|à bientôt|bonne journée|bonne soirée|c'est gentil|et toi|ça va|comment vas-tu|comment ça va|tu vas bien) ?)+"  # énoncé entièrement fait de formules de politesse (ponctuation ignorée)
+tts:
+  timeout_s: 60             # délai réseau du TTS (connexion, lecture entre deux morceaux d'audio)
+  fallback_voice: longanhuan_v3.6   # voix du TTS de secours (TTS_MODEL_ALT, PCM) si MiniMax échoue ; accent marqué en français
+  response_format: mp3      # MiniMax ne streame qu'en mp3 (décodage en PCM côté serveur)
+  min_chunk_chars: 20       # découpe en phrases avant envoi au TTS
+  first_chunk_min_chars: 8  # le 1er morceau part plus tôt (latence)
+  speeds:                   # débit relatif par voix (mesuré : ~6,6 s pour la phrase test, contre 8,9 s et 7,6 s à 1.0)
+    French_Female_Speech_New: 1.3
+    French_Male_Speech_New: 1.15
+keepalive_s: 25            # appels factices périodiques (Whisper de l'école, connexions)
+server:
+  allowed_origin_hosts: [localhost, 127.0.0.1, "::1"]   # hôtes autorisés dans l'en-tête Origin de /ws (ajouter l'IP/le nom pour un accès depuis le réseau local)
+  busy_grace_s: 2.0         # une 2e connexion attend ce délai que la session en cours se ferme (rechargement de page) avant d'être refusée
+  max_playback_lead_ms: 10000   # `playback_started.in_ms` au-delà (ou négatif) : message rejeté
+  max_text_chars: 2000      # longueur maximale d'un message texte du client (au-delà : rejeté avec un message `error`)
+metrics:
+  trace_dir: data/traces

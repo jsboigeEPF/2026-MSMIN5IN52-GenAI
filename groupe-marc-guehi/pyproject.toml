@@ -1,0 +1,27 @@
+[project]
+name = "voice-agent"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "httpx>=0.27",
+  "python-dotenv>=1.0",
+  "pyyaml>=6.0",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "numpy>=1.26",
+  "silero-vad>=5.1",
+  "onnxruntime>=1.18",
+  "miniaudio>=1.60",
+]
+
+[project.optional-dependencies]
+analysis = ["pandas", "matplotlib", "jupyter", "jiwer"]
+dev = ["pytest", "pytest-asyncio", "ruff", "playwright"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]

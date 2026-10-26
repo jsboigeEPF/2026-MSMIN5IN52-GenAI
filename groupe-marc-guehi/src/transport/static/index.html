@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232f6f5e'/%3E%3Crect x='12' y='6' width='8' height='14' rx='4' fill='white'/%3E%3Cpath d='M8 16a8 8 0 0 0 16 0M16 24v3' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<title>Agent vocal</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #ffffff; --ink: #1c1b19; --muted: #77756e; --line: #e4e1d9;
+    --accent: #2f6f5e; --accent-ink: #ffffff; --user: #e9efe9; --agent: #ffffff;
+    --listen: #2f9e6f; --think: #d9922b; --speak: #3a76d8; --idle: #a9a69d; --err: #b3392f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151614; --panel: #1e201d; --ink: #ecebe6; --muted: #98968d; --line: #2d2f2b;
+      --accent: #58b79e; --accent-ink: #0f1a16; --user: #243029; --agent: #1e201d;
+      --listen: #4cc794; --think: #e8a746; --speak: #6b9bf0; --idle: #6c6a63; --err: #e26a5e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+         display: flex; flex-direction: column; align-items: center; }
+  .app { width: 100%; max-width: 760px; height: 100%; display: flex; flex-direction: column; padding: 0 16px; }
+  header { flex-wrap: wrap; display: flex; align-items: center; justify-content: space-between; padding: 18px 0 10px; gap: 12px; }
+  h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  .meta { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px; background: var(--panel);
+          border: 1px solid var(--line); font-size: 13px; font-weight: 550; color: var(--ink); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--idle); }
+  body[data-state="listening"] .dot { background: var(--listen); animation: pulse 1.6s infinite; }
+  body[data-state="thinking"] .dot { background: var(--think); animation: pulse 0.7s infinite; }
+  body[data-state="speaking"] .dot { background: var(--speak); animation: pulse 0.9s infinite; }
+  @keyframes pulse { 50% { opacity: .35; transform: scale(.8); } }
+  #log { flex: 1; overflow-y: auto; padding: 8px 2px 16px; display: flex; flex-direction: column; gap: 14px; }
+  .empty { margin: auto; text-align: center; color: var(--muted); max-width: 360px; }
+  .msg { max-width: 82%; padding: 10px 14px; border-radius: 16px; border: 1px solid var(--line); white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: var(--user); border-bottom-right-radius: 5px; }
+  .msg.agent { align-self: flex-start; background: var(--agent); border-bottom-left-radius: 5px; }
+  .msg.agent.wait { color: var(--muted); }
+  .msg.cut { border-style: dashed; }
+  .msg.wait .t { opacity: .6; }
+  .stats { margin-top: 6px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .stats b { color: var(--ink); font-weight: 650; }
+  .err { align-self: center; color: var(--err); font-size: 14px; text-align: center; }
+  .controls { display: flex; flex-direction: column; gap: 12px; padding: 10px 0 18px; border-top: 1px solid var(--line); }
+  .row { display: flex; gap: 10px; align-items: center; }
+  #toggle { appearance: none; border: 0; cursor: pointer; background: var(--accent); color: var(--accent-ink); font: inherit;
+            font-weight: 650; padding: 12px 22px; border-radius: 999px; min-width: 190px; }
+  #toggle.on { background: var(--err); color: #fff; }
+  #toggle:focus-visible, #text:focus-visible, #send:focus-visible { outline: 3px solid var(--speak); outline-offset: 2px; }
+  .meter { flex: 1; height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--listen); transition: width .08s linear; }
+  body[data-vad="1"] .meter i { background: var(--speak); }
+  #text { flex: 1; font: inherit; padding: 10px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  #send { appearance: none; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: inherit; font-weight: 600;
+          padding: 10px 18px; border-radius: 999px; cursor: pointer; }
+  #send:disabled, #text:disabled { opacity: .5; cursor: not-allowed; }
+  #mute { appearance: none; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: inherit; font-weight: 600;
+          padding: 10px 18px; border-radius: 999px; cursor: pointer; }
+  #mute:disabled { opacity: .5; cursor: not-allowed; }
+  #mute[aria-pressed="true"] { border-color: var(--think); }
+  /* bascule de vue : Voix (onde + sous-titres) / Écrit (fil complet) */
+  .views { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); padding: 2px; }
+  .views button { appearance: none; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; padding: 3px 12px; border-radius: 999px; cursor: pointer; }
+  .views button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .views button:focus-visible, #mute:focus-visible { outline: 3px solid var(--speak); outline-offset: 2px; }
+  #stage { flex: 1; min-height: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 8px 0 16px; }
+  body[data-view="voice"] #stage { display: flex; }
+  body[data-view="voice"] #log, body[data-view="voice"] .textonly { display: none; }
+  body[data-view="text"] #stage { display: none; }
+  #wave { width: 100%; max-width: 680px; height: 170px; display: block; }
+  #subs { width: 100%; max-width: 680px; min-height: 3.2em; max-height: 6.6em; overflow-y: auto; scrollbar-width: none; text-align: center;
+          font-size: clamp(18px, 3.2vw, 24px); line-height: 1.45; font-weight: 500;
+          -webkit-mask-image: linear-gradient(to bottom, transparent, #000 22%); mask-image: linear-gradient(to bottom, transparent, #000 22%); }
+  #subs::-webkit-scrollbar { display: none; }
+  #subs .w { animation: wordin .28s ease-out both; }
+  @keyframes wordin { from { opacity: 0; transform: translateY(4px); } }
+  #subs.cut { color: var(--muted); }
+  #stageHint { color: var(--muted); font-size: 14px; min-height: 1.4em; text-align: center; margin: 0; }
+  #stageErr { color: var(--err); font-size: 14px; text-align: center; margin: 0; }
+  #stageErr:empty { display: none; }
+  .hint { color: var(--muted); font-size: 12.5px; }
+  .hint kbd { font: inherit; padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); }
+  .summary { font-variant-numeric: tabular-nums; }
+  .badge { font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; margin-left: 8px; vertical-align: 1px; }
+  .msg .who { display: block; font-size: 11.5px; font-weight: 650; color: var(--muted); margin-bottom: 2px; letter-spacing: .02em; text-transform: uppercase; }
+  .banner { align-self: stretch; display: none; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 14px; border-radius: 12px;
+            border: 1px solid var(--think); background: var(--panel); font-size: 14px; }
+  body[data-fallback="1"] .banner { display: flex; }
+  .banner button { appearance: none; font: inherit; font-weight: 600; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 999px; padding: 4px 14px; cursor: pointer; }
+  body[data-searching="1"] #state { font-style: italic; }
+  #speaking { visibility: hidden; font-size: 12.5px; color: var(--speak); font-weight: 600; }
+  body[data-vad="1"] #speaking { visibility: visible; }
+  @media (prefers-reduced-motion: reduce) { #subs .w { animation: none; } .dot, .meter i { animation: none !important; transition: none !important; } }
+  @media (max-width: 520px) {
+    #toggle { min-width: 0; flex: 1; padding: 12px 14px; }
+    .msg { max-width: 94%; }
+    .meta #voice { display: none; }
+    #wave { height: 130px; }
+  }
+</style>
+</head>
+<body data-state="idle" data-vad="0" data-view="voice">
+<div class="app">
+  <header>
+    <h1>Agent vocal</h1>
+    <div class="meta"><span class="summary" id="summary" title="Médiane de la latence perçue sur cette conversation"></span><span id="voice"></span><span class="views" role="group" aria-label="Affichage"><button id="viewVoice" type="button" aria-pressed="true">Voix</button><button id="viewText" type="button" aria-pressed="false">Écrit</button></span><span class="pill"><span class="dot"></span><span id="state">Hors ligne</span></span></div>
+  </header>
+
+  <section id="stage" aria-label="Conversation vocale">
+    <canvas id="wave" aria-hidden="true"></canvas>
+    <p id="stageHint"></p>
+    <div id="subs" aria-live="off"></div>
+    <p id="stageErr" role="alert"></p>
+  </section>
+
+  <main id="log" aria-live="polite">
+    <div class="empty" id="empty">Cliquez sur « Démarrer » puis parlez en français. L'agent répond à voix haute et peut chercher sur internet ; vous pouvez aussi écrire en bas de page.</div>
+  </main>
+
+  <div class="controls">
+    <div class="banner" id="banner" role="status"><span>La reconnaissance vocale ne répond plus : mode texte activé (l'agent vous répond toujours à voix haute).</span><button id="retryVoice" type="button">Réessayer la voix</button></div>
+    <div class="row">
+      <button id="toggle" type="button">Démarrer la conversation</button>
+      <div class="meter" aria-hidden="true"><i id="level"></i></div>
+      <button id="mute" type="button" aria-pressed="false" disabled>Couper le micro</button>
+      <span id="speaking" aria-hidden="true">Voix détectée</span>
+    </div>
+    <div class="row textonly">
+      <input id="text" type="text" aria-label="Message écrit (mode texte)" placeholder="Mode texte : écrivez un message…" autocomplete="off" disabled>
+      <button id="send" type="button" disabled>Envoyer</button>
+    </div>
+    <div class="hint">Interrompez l'agent en parlant<span class="textonly"> (ou en écrivant)</span> · casque conseillé contre l'écho<span class="textonly"> · <kbd>Entrée</kbd> envoie le texte</span></div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const STATES = { idle: "Hors ligne", listening: "À l'écoute", thinking: "Réflexion…", speaking: "L'agent parle" };
+const stats = window.__stats = { framesSent: 0, audioBytes: 0, chunksPlayed: 0, transcripts: [], states: [], errors: [], metrics: [], interrupts: 0, truncates: [] };
+let ws, ctx, stream, node, playHead = 0, playStart = null, pending = 0, audioEnded = false, sources = [];
+let curUser = null, curAgent = null, running = false;
+let analyser = null, micRms = 0, muted = false;
+let liveAgent = null;           // dernier message de l'agent : c'est lui que les sous-titres montrent
+const live = new Set();         // messages dont les mots sont encore en train d'apparaître
+let cps = 15;                   // caractères prononcés par seconde (estimation recalée sur la durée réelle de chaque morceau)
+
+function setState(s) { document.body.dataset.searching = "0"; document.body.dataset.state = s; $("state").textContent = STATES[s] || s; stats.states.push(s); readColors(); updateHint(); }
+function scroll() { $("log").scrollTop = $("log").scrollHeight; }
+function addMsg(role, text, cls = "") {
+  $("empty")?.remove();
+  const d = document.createElement("div");
+  d.className = `msg ${role} ${cls}`.trim();
+  const w = document.createElement("span"); w.className = "who"; w.textContent = role === "user" ? "Vous" : "Agent"; d.appendChild(w);
+  const t = document.createElement("span"); t.className = "t"; t.textContent = text; d.appendChild(t);
+  $("log").appendChild(d);
+  scroll();
+  if (role === "agent") { liveAgent = d; syncSubs(d); }
+  return d;
+}
+const setText = (el, text) => { el.querySelector(".t").textContent = text; };
+const getText = (el) => el.querySelector(".t").textContent;
+function addErr(text) {
+  const d = document.createElement("div"); d.className = "err"; d.textContent = text; $("log").appendChild(d); scroll(); stats.errors.push(text);
+  $("stageErr").textContent = text;   // visible aussi dans la vue Voix
+}
+const fmt = (ms) => ms == null ? "—" : (ms / 1000).toFixed(2) + " s";
+
+function updateSummary() {
+  const v = stats.metrics.map((m) => m.content_ms).filter((x) => x != null).sort((a, b) => a - b);
+  $("summary").textContent = v.length ? `Latence médiane ${fmt(v[Math.floor((v.length - 1) / 2)])} · ${v.length} tour${v.length > 1 ? "s" : ""}` : "";
+}
+
+function enqueue(buf) {
+  const i16 = new Int16Array(buf), f32 = new Float32Array(i16.length);
+  for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+  const ab = ctx.createBuffer(1, f32.length, 24000);
+  ab.copyToChannel(f32, 0);
+  const src = ctx.createBufferSource();
+  src.buffer = ab;
+  src.connect(analyser);
+  const t = Math.max(playHead, ctx.currentTime + 0.03);
+  src.start(t);
+  if (playStart === null) {   // début de la réponse courante (accroche comprise)
+    playStart = t;
+    // mesure : le serveur trace `playback_first_sample` (instant où le premier échantillon est audible, latence de sortie comprise)
+    if (ws?.readyState === 1) ws.send(JSON.stringify({ type: "playback_started", in_ms: Math.max(0, Math.round((t - ctx.currentTime + (ctx.outputLatency || 0)) * 1000)) }));
+  }
+  playHead = t + ab.duration;
+  pending++;
+  stats.chunksPlayed++;
+  sources.push(src);
+  src.onended = () => { pending--; sources = sources.filter((x) => x !== src); maybeEnded(); };
+}
+function maybeEnded() {
+  if (audioEnded && pending === 0 && ws?.readyState === 1) { audioEnded = false; playStart = null; ws.send(JSON.stringify({ type: "playback_ended" })); }
+}
+function clearReveals() { live.forEach((a) => { a.chunks = null; }); live.clear(); }
+function stopPlayback() {
+  clearReveals();
+  const played = playStart === null ? 0 : Math.max(0, ctx.currentTime - playStart);
+  sources.forEach((s) => { s.onended = null; try { s.stop(); } catch {} });
+  sources = []; pending = 0; audioEnded = false; playHead = 0; playStart = null;
+  return played;
+}
+
+function ensureAgent() {
+  if (!curAgent) curAgent = addMsg("agent", "");
+  return curAgent;
+}
+
+function onMessage(ev) {
+  if (typeof ev.data !== "string") { stats.audioBytes += ev.data.byteLength; enqueue(ev.data); return; }
+  const m = JSON.parse(ev.data);
+  if (m.type === "ready") {
+    $("voice").textContent = (m.voice.includes("Female") ? "Voix féminine" : m.voice.includes("Male") ? "Voix masculine" : "Voix de test") + (m.dry_run ? " (simulation)" : "");
+    setState(m.state);
+  }
+  else if (m.type === "searching") { document.body.dataset.searching = "1"; $("state").textContent = "Recherche sur internet…"; }
+  else if (m.type === "fallback") {
+    document.body.dataset.fallback = m.mode === "text" ? "1" : "0";
+    if (m.mode === "text") { setView("text"); $("text").focus(); }
+  }
+  else if (m.type === "state") setState(m.state);
+  else if (m.type === "vad") document.body.dataset.vad = m.speaking ? "1" : "0";
+  else if (m.type === "user_pending") {
+    if (pending === 0) playStart = null;
+    curUser = addMsg("user", "…", "wait"); curAgent = null;
+    newQuestion();
+  }
+  else if (m.type === "transcript") {
+    if (!curUser) { curUser = addMsg("user", m.text); newQuestion(); }  // sans user_pending : texte saisi
+    else { setText(curUser, m.text); curUser.classList.remove("wait"); }
+    stats.transcripts.push(m.text); curUser = null;
+    if (!curAgent) curAgent = addMsg("agent", "…", "wait");
+  }
+  else if (m.type === "ignored") { curUser?.remove(); curUser = null; curAgent = null; }   // transcription vide ou bruit : rien à répondre
+  else if (m.type === "agent_chunk") {
+    // le texte du morceau arrive juste avant son audio : ses mots apparaissent au rythme de la lecture
+    const a = ensureAgent();
+    if (a.classList.contains("wait")) { a.classList.remove("wait"); setText(a, ""); }
+    const now = ctx.currentTime, start = Math.max(playHead, now + 0.03);
+    a.chunks = a.chunks || [];
+    const prev = a.chunks[a.chunks.length - 1];
+    if (prev && !prev.exact && playHead > prev.start) {   // l'audio du morceau précédent est entièrement arrivé : durée réelle connue
+      prev.dur = playHead - prev.start; prev.exact = true;
+      cps = Math.min(30, Math.max(8, 0.6 * cps + 0.4 * (prev.chars / prev.dur)));
+    }
+    const segs = splitSegments(m.text);
+    let acc = 0;
+    const total = m.text.length + 1;
+    const at = segs.map((g) => { const x = acc; acc += g.length + 1; return x / total; });  // fraction de la durée où chaque groupe de mots commence
+    a.chunks.push({ segs, at, start, chars: m.text.length, dur: Math.max(0.3, m.text.length / cps), exact: false });
+    live.add(a);
+  }
+  else if (m.type === "metrics") {
+    stats.metrics.push(m);
+    updateSummary();
+    if (curAgent) {
+      const s = document.createElement("div"); s.className = "stats";
+      const first = m.filler ? `Premier son <b>${fmt(m.first_sound_ms)}</b> · réponse ${fmt(m.content_ms)}${m.gap_ms > 150 ? ` (silence ${fmt(m.gap_ms)})` : ""}` : `Latence perçue <b>${fmt(m.content_ms)}</b>`;
+      s.innerHTML = `${first} · fin de parole ${fmt(m.end_silence_ms)} · STT ${fmt(m.stt_ms)}${m.searched ? ` · recherche ${fmt(m.search_ms)}` : ""} · LLM ${fmt(m.llm_ttft_ms)} · TTS ${fmt(m.tts_ttfb_ms)}`;
+      curAgent.appendChild(s);
+    }
+    curAgent = null; curUser = null;
+  }
+  else if (m.type === "audio_end") {
+    audioEnded = true; maybeEnded();
+    const last = liveAgent?.chunks?.[liveAgent.chunks.length - 1];   // tout l'audio est arrivé : durée exacte du dernier morceau
+    if (last && !last.exact && playHead > last.start) { last.dur = playHead - last.start; last.exact = true; }
+  }
+  else if (m.type === "interrupt") {
+    stats.interrupts++;
+    const played = stopPlayback();
+    ws.send(JSON.stringify({ type: "interrupted", played_s: played }));
+  }
+  else if (m.type === "truncate") {
+    clearReveals();
+    stats.truncates.push(m.text);
+    const agents = document.querySelectorAll(".msg.agent");
+    const last = curAgent || agents[agents.length - 1];
+    if (last) {
+      last.querySelector(".stats")?.remove();
+      last.classList.remove("wait");
+      last.chunks = null; live.delete(last);
+      if (m.text) { setText(last, m.text); last.classList.add("cut"); if (!last.querySelector(".badge")) { const b = document.createElement("span"); b.className = "badge"; b.textContent = "interrompu"; last.querySelector(".who").appendChild(b); } } else last.remove();
+      syncSubs(m.text ? last : null);
+    }
+    curAgent = null; curUser = null;
+  }
+  else if (m.type === "tts_down") addErr("Voix de l'agent indisponible (service de synthèse en panne) — sa réponse reste affichée à l'écrit.");
+  else if (m.type === "error") { addErr(`${m.message} — ${m.hint || ""}`); if (running && document.body.dataset.view === "text") $("text").focus(); if (curAgent === liveAgent) syncSubs(null); curAgent?.remove(); curAgent = null; curUser?.remove(); curUser = null; }
+}
+
+async function start() {
+  $("toggle").disabled = true;
+  try {
+    ctx = new AudioContext();
+    analyser = ctx.createAnalyser(); analyser.fftSize = 1024; analyser.connect(ctx.destination);
+    await ctx.audioWorklet.addModule("/static/worklet.js");
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+    ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+    ws.binaryType = "arraybuffer";
+    ws.onmessage = onMessage;
+    ws.onclose = () => { if (running) stop(); };
+    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error("connexion au serveur impossible")); });
+    node = new AudioWorkletNode(ctx, "pcm-processor");
+    ctx.createMediaStreamSource(stream).connect(node);
+    node.port.onmessage = (e) => {
+      micRms = muted ? 0 : e.data.rms;
+      $("level").style.width = Math.min(100, micRms * 400) + "%";
+      if (ws.readyState === 1 && document.body.dataset.fallback !== "1" && !muted) { ws.send(e.data.pcm); stats.framesSent++; }
+    };
+    running = true;
+    $("toggle").textContent = "Arrêter"; $("toggle").classList.add("on");
+    $("text").disabled = $("send").disabled = $("mute").disabled = false;
+  } catch (e) {
+    addErr(e.name === "NotAllowedError" ? "Accès au micro refusé : autorisez-le dans le navigateur." : `Erreur : ${e.message}`);
+    stop();
+  }
+  $("toggle").disabled = false;
+}
+
+function stop() {
+  running = false;
+  try { ws?.close(); } catch {}
+  stream?.getTracks().forEach((t) => t.stop());
+  node?.disconnect();
+  ctx?.close();
+  clearReveals(); analyser = null; micRms = 0; syncSubs(null); $("stageErr").textContent = "";
+  pending = 0; audioEnded = false; playHead = 0; playStart = null; sources = []; curAgent = null; curUser = null;
+  $("level").style.width = "0"; document.body.dataset.vad = "0";
+  $("toggle").textContent = "Démarrer la conversation"; $("toggle").classList.remove("on");
+  $("text").disabled = $("send").disabled = $("mute").disabled = true; document.body.dataset.fallback = "0";
+  setMuted(false);
+  setState("idle");
+}
+
+// ---------- vue Voix / Écrit ----------
+function setView(v) {
+  document.body.dataset.view = v;
+  $("viewVoice").setAttribute("aria-pressed", String(v === "voice"));
+  $("viewText").setAttribute("aria-pressed", String(v === "text"));
+  try { localStorage.setItem("view", v); } catch {}
+  if (v === "text") { scroll(); if (running) $("text").focus(); } else resizeWave();
+}
+$("viewVoice").onclick = () => setView("voice");
+$("viewText").onclick = () => setView("text");
+{ let v = "voice"; try { v = localStorage.getItem("view") === "text" ? "text" : "voice"; } catch {} document.body.dataset.view = v; }
+
+// ---------- sous-titres : toute la réponse en cours, par groupes de mots, jusqu'à la question suivante ----------
+const subs = { text: "" };
+function syncSubs(a) {
+  const el = $("subs");
+  const txt = a && !a.classList.contains("wait") ? getText(a) : "";
+  if (a === liveAgent || a === null) {
+    el.classList.toggle("cut", !!a?.classList.contains("cut"));
+    if (txt === subs.text) return;
+    if (txt && txt.startsWith(subs.text)) {   // on ne crée que les nouveaux mots (animation d'apparition)
+      const added = txt.slice(subs.text.length).split(/(\s+)/);
+      for (const part of added) {
+        if (!part) continue;
+        if (/^\s+$/.test(part)) el.appendChild(document.createTextNode(" "));
+        else { const w = document.createElement("span"); w.className = "w"; w.textContent = part; el.appendChild(w); }
+      }
+    } else {
+      el.textContent = "";
+      for (const part of txt.split(/\s+/).filter(Boolean)) { const w = document.createElement("span"); w.className = "w"; w.textContent = part; el.appendChild(w); el.appendChild(document.createTextNode(" ")); }
+    }
+    subs.text = txt;
+    el.scrollTop = el.scrollHeight;
+    updateHint();
+  }
+}
+function newQuestion() { liveAgent = null; syncSubs(null); $("stageErr").textContent = ""; }
+function updateHint() {
+  const st = document.body.dataset.state;
+  $("stageHint").textContent = muted ? "Micro coupé : l'agent ne vous entend pas."
+    : st === "idle" ? "Cliquez sur « Démarrer » puis parlez en français."
+    : st === "listening" && !subs.text ? "Je vous écoute." : "";
+}
+
+// ---------- révélation par groupes de mots (horloge audio) ----------
+// groupes de mots (fin de proposition ou 3 à 8 mots) : afficher des bouts de phrase plutôt que chaque mot garde les sous-titres calés sur la voix
+const SEG_MIN_WORDS = 3, SEG_MAX_WORDS = 8, SEG_LEAD_S = 0.12;  // SEG_LEAD_S : un groupe apparaît légèrement avant d'être prononcé
+function splitSegments(text) {
+  const out = []; let cur = [];
+  for (const w of text.split(/\s+/).filter(Boolean)) {
+    cur.push(w);
+    if ((cur.length >= SEG_MIN_WORDS && /[,;:.!?…]$/.test(w)) || cur.length >= SEG_MAX_WORDS) { out.push(cur.join(" ")); cur = []; }
+  }
+  if (cur.length) out.push(cur.join(" "));
+  return out;
+}
+function renderAgent(a) {
+  if (!a.chunks) { live.delete(a); return; }
+  const now = ctx ? ctx.currentTime - (ctx.outputLatency || 0) + SEG_LEAD_S : 0;   // horloge de ce qui est réellement audible
+  const parts = []; let done = true;
+  for (const c of a.chunks) {
+    const frac = (now - c.start) / c.dur;
+    let n = 0;
+    if (frac >= 0) while (n < c.segs.length && c.at[n] <= frac) n++;
+    if (n < c.segs.length) done = false;
+    if (n) parts.push(c.segs.slice(0, n).join(" "));
+  }
+  const txt = parts.join(" ");
+  if (txt !== getText(a)) { setText(a, txt); syncSubs(a); if (document.body.dataset.view === "text") scroll(); }
+  if (done && a.chunks.every((c) => c.exact || now > c.start + c.dur + 1)) live.delete(a);
+}
+
+// ---------- onde ----------
+const wave = $("wave"), g = wave.getContext("2d");
+const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+let colors = { idle: "#a9a69d", listen: "#2f9e6f", think: "#d9922b", speak: "#3a76d8" };
+function readColors() {
+  const cs = getComputedStyle(document.body);
+  for (const k of Object.keys(colors)) colors[k] = cs.getPropertyValue("--" + k).trim() || colors[k];
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", readColors);
+function resizeWave() {
+  const r = wave.getBoundingClientRect(), d = devicePixelRatio || 1;
+  if (r.width) { wave.width = Math.round(r.width * d); wave.height = Math.round(r.height * d); }
+}
+addEventListener("resize", resizeWave);
+const tbuf = new Float32Array(1024);
+let amp = 0, agentLvl = 0;
+function draw(t) {
+  const st = document.body.dataset.state;
+  if (analyser) { analyser.getFloatTimeDomainData(tbuf); let sq = 0; for (let i = 0; i < tbuf.length; i++) sq += tbuf[i] * tbuf[i]; agentLvl += (Math.sqrt(sq / tbuf.length) * 6 - agentLvl) * 0.4; }
+  else agentLvl = 0;
+  const userLvl = document.body.dataset.vad === "1" ? Math.min(1, micRms * 12) : 0;
+  const speaking = agentLvl > 0.04 && agentLvl >= userLvl;
+  const color = muted ? colors.idle : speaking ? colors.speak : userLvl > 0.04 ? colors.listen : st === "thinking" ? colors.think : st === "listening" ? colors.listen : colors.idle;
+  const idle = reduce.matches ? 0.03 : st === "thinking" ? 0.07 + 0.05 * Math.sin(t / 260) : st === "listening" ? 0.05 + 0.02 * Math.sin(t / 600) : 0.03;
+  const target = Math.min(1, Math.max(speaking ? agentLvl : userLvl, idle));
+  amp += (target - amp) * 0.25;
+  const W = wave.width, H = wave.height, mid = H / 2, d = devicePixelRatio || 1;
+  g.clearRect(0, 0, W, H);
+  g.lineCap = "round"; g.strokeStyle = color;
+  const layers = [[1, 0.9, 2.2, 1.6], [0.7, 0.45, 3.1, -1.1], [0.5, 0.3, 4.3, 0.8]];  // [amplitude, opacité, fréquence, vitesse]
+  for (const [k, alpha, f, v] of layers) {
+    g.globalAlpha = alpha; g.lineWidth = (k === 1 ? 3 : 2) * d; g.beginPath();
+    for (let x = 0; x <= W; x += 4 * d) {
+      const u = x / W, taper = Math.sin(Math.PI * u) ** 2;
+      const y = mid + Math.sin(u * Math.PI * 2 * f + (reduce.matches ? 0 : t / 1000 * v * 2)) * amp * k * mid * 0.9 * taper;
+      x === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  g.globalAlpha = 1;
+}
+function frame(t) {
+  live.forEach(renderAgent);
+  draw(t);
+  requestAnimationFrame(frame);
+}
+
+function setMuted(v) {
+  muted = v; updateHint();
+  $("mute").textContent = v ? "Réactiver le micro" : "Couper le micro";
+  $("mute").setAttribute("aria-pressed", String(v));
+  if (v) { $("level").style.width = "0"; document.body.dataset.vad = "0"; }
+  if (ws?.readyState === 1) ws.send(JSON.stringify({ type: "mute", muted: v }));
+}
+
+function sendText() {
+  const t = $("text").value.trim();
+  if (!t || ws?.readyState !== 1) return;
+  ws.send(JSON.stringify({ type: "text", text: t }));
+  $("text").value = "";
+}
+$("toggle").onclick = () => (running ? stop() : start());
+$("retryVoice").onclick = () => { ws?.readyState === 1 && ws.send(JSON.stringify({ type: "voice_retry" })); };
+$("mute").onclick = () => setMuted(!muted);
+$("send").onclick = sendText;
+setView(document.body.dataset.view); readColors(); updateHint(); resizeWave(); requestAnimationFrame(frame);
+$("text").onkeydown = (e) => { if (e.key === "Enter") sendText(); };
+</script>
+</body>
+</html>

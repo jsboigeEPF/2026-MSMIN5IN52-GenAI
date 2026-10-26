@@ -1,0 +1,10 @@
+# Prix unitaires en USD (on assimile 1 $ ≈ 1 €, hypothèse prudente). Source : OpenRouter /models, 2026-10-20.
+# Les unités du TTS ne sont pas documentées : hypothèse « par caractère » (0,00006 $ ≈ 60 $ / 1M caractères).
+tts:
+  minimax/speech-2.8-turbo: {per_char: 0.00006}
+  qwen/qwen-audio-3.0-tts-flash: {per_char: 0.000015}
+llm:  # utilisé seulement si OpenRouter ne renvoie pas usage.cost
+  deepseek/deepseek-v4.1-flash: {prompt: 0.00000003552, completion: 0.00000012}
+  qwen/qwen3.8-27b: {prompt: 0.00000004, completion: 0.00000135}
+stt:
+  whisper-large-v3-turbo: {per_second: 0}  # serveur de l'école
