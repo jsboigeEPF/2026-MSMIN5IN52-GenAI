@@ -1,0 +1,99 @@
+{
+  "groups": {
+    "simulated/local": {
+      "endpoint_ms": {
+        "n": 1,
+        "min": 512.0,
+        "max": 512.0,
+        "p50": 512.0,
+        "p95": 512.0,
+        "p50_ci_low": 512.0,
+        "p50_ci_high": 512.0,
+        "p95_reliable": false
+      },
+      "stt_ms": {
+        "n": 1,
+        "min": 5.068571,
+        "max": 5.068571,
+        "p50": 5.068571,
+        "p95": 5.068571,
+        "p50_ci_low": 5.068571,
+        "p50_ci_high": 5.068571,
+        "p95_reliable": false
+      },
+      "llm_first_token_ms": {
+        "n": 1,
+        "min": 3.234236,
+        "max": 3.234236,
+        "p50": 3.234236,
+        "p95": 3.234236,
+        "p50_ci_low": 3.234236,
+        "p50_ci_high": 3.234236,
+        "p95_reliable": false
+      },
+      "sentence_ms": {
+        "n": 1,
+        "min": 31.913236,
+        "max": 31.913236,
+        "p50": 31.913236,
+        "p95": 31.913236,
+        "p50_ci_low": 31.913236,
+        "p50_ci_high": 31.913236,
+        "p95_reliable": false
+      },
+      "tts_ms": {
+        "n": 1,
+        "min": 5.856726,
+        "max": 5.856726,
+        "p50": 5.856726,
+        "p95": 5.856726,
+        "p50_ci_low": 5.856726,
+        "p50_ci_high": 5.856726,
+        "p95_reliable": false
+      },
+      "playback_ms": {
+        "n": 1,
+        "min": 0.080141,
+        "max": 0.080141,
+        "p50": 0.080141,
+        "p95": 0.080141,
+        "p50_ci_low": 0.080141,
+        "p50_ci_high": 0.080141,
+        "p95_reliable": false
+      },
+      "response_ms": {
+        "n": 1,
+        "min": 558.15291,
+        "max": 558.15291,
+        "p50": 558.15291,
+        "p95": 558.15291,
+        "p50_ci_low": 558.15291,
+        "p50_ci_high": 558.15291,
+        "p95_reliable": false
+      },
+      "text_response_ms": {
+        "n": 0
+      },
+      "stop_ms": {
+        "n": 0
+      },
+      "turns": 1,
+      "completed": 1
+    }
+  },
+  "interruptions": {},
+  "wer": {
+    "simulated/local/simulated-tone/pink/10.0": {
+      "n": 1,
+      "words": 3,
+      "errors": 0,
+      "wer": 0.0
+    }
+  },
+  "memory": {
+    "device_used_mib": null,
+    "torch_peak_mib": null
+  },
+  "cost_eur": 0.0,
+  "warning": "p95 peu fiable pour n < 20. Les simulations ne valident pas le matériel."
+}

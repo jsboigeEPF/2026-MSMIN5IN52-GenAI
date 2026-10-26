@@ -1,0 +1,57 @@
+test_complete_response_commits_played_text (test_agent.AgentTests.test_complete_response_commits_played_text) ... ok
+test_failed_output_abort_still_cancels_generation (test_agent.AgentTests.test_failed_output_abort_still_cancels_generation) ... ok
+test_interrupt_during_generation_closes_stream (test_agent.AgentTests.test_interrupt_during_generation_closes_stream) ... ok
+test_interrupt_during_playback_does_not_commit_partial_sentence (test_agent.AgentTests.test_interrupt_during_playback_does_not_commit_partial_sentence) ... ok
+test_native_worker_never_overlaps_after_cancellation (test_agent.AgentTests.test_native_worker_never_overlaps_after_cancellation) ... ok
+test_pipeline_error_returns_to_listening_and_next_turn_works (test_agent.AgentTests.test_pipeline_error_returns_to_listening_and_next_turn_works) ... ok
+test_playback_starts_before_llm_finishes (test_agent.AgentTests.test_playback_starts_before_llm_finishes) ... ok
+test_second_question_cancels_first (test_agent.AgentTests.test_second_question_cancels_first) ... ok
+test_text_only_does_not_emit_audio_measurements (test_agent.AgentTests.test_text_only_does_not_emit_audio_measurements) ... ok
+test_timeout_does_not_leave_background_response (test_agent.AgentTests.test_timeout_does_not_leave_background_response) ... ok
+test_keeps_six_pairs_not_six_messages (test_agent.HistoryTests.test_keeps_six_pairs_not_six_messages) ... ok
+test_abort_invalidates_delayed_completion (test_audio.AudioTests.test_abort_invalidates_delayed_completion) ... ok
+test_callback_silences_output_after_stop (test_audio.AudioTests.test_callback_silences_output_after_stop) ... ok
+test_dac_ack_waits_until_samples_have_played (test_audio.AudioTests.test_dac_ack_waits_until_samples_have_played) ... ok
+test_empty_audio_is_rejected (test_audio.AudioTests.test_empty_audio_is_rejected) ... ok
+test_delayed_attenuated_reference_and_abort_cutoff (test_audio.EchoTests.test_delayed_attenuated_reference_and_abort_cutoff) ... ok
+test_defaults_are_valid (test_config.ConfigTests.test_defaults_are_valid) ... ok
+test_unknown_setting_is_rejected (test_config.ConfigTests.test_unknown_setting_is_rejected) ... ok
+test_unsupported_sample_rate_is_rejected (test_config.ConfigTests.test_unsupported_sample_rate_is_rejected) ... ok
+test_broken_jsonl_identifies_line (test_evaluation.EvaluationTests.test_broken_jsonl_identifies_line) ... ok
+test_clean_is_unchanged (test_evaluation.EvaluationTests.test_clean_is_unchanged) ... ok
+test_empty_statistics (test_evaluation.EvaluationTests.test_empty_statistics) ... ok
+test_exact_snr_without_clipping (test_evaluation.EvaluationTests.test_exact_snr_without_clipping) ... ok
+test_french_wer_normalizes_punctuation (test_evaluation.EvaluationTests.test_french_wer_normalizes_punctuation) ... ok
+test_jsonl_is_flushed_and_parseable (test_evaluation.EvaluationTests.test_jsonl_is_flushed_and_parseable) ... ok
+test_missing_audio_does_not_become_zero_latency (test_evaluation.EvaluationTests.test_missing_audio_does_not_become_zero_latency) ... ok
+test_missing_transcription_counts_as_deletions (test_evaluation.EvaluationTests.test_missing_transcription_counts_as_deletions) ... ok
+test_percentiles_and_bootstrap (test_evaluation.EvaluationTests.test_percentiles_and_bootstrap) ... ok
+test_pink_noise_is_seeded (test_evaluation.EvaluationTests.test_pink_noise_is_seeded) ... ok
+test_sessions_and_modes_are_separate (test_evaluation.EvaluationTests.test_sessions_and_modes_are_separate) ... ok
+test_wav_roundtrip (test_evaluation.EvaluationTests.test_wav_roundtrip) ... ok
+test_wilson_does_not_claim_certainty_for_one_success (test_evaluation.EvaluationTests.test_wilson_does_not_claim_certainty_for_one_success) ... ok
+test_zero_signal_rejects_snr (test_evaluation.EvaluationTests.test_zero_signal_rejects_snr) ... ok
+test_api_error_is_propagated (test_ollama.OllamaTests.test_api_error_is_propagated) ... ok
+test_stream_parses_content_and_done (test_ollama.OllamaTests.test_stream_parses_content_and_done) ... ok
+test_truncated_stream_is_error (test_ollama.OllamaTests.test_truncated_stream_is_error) ... ok
+test_abbreviation (test_sentences.SentenceTests.test_abbreviation) ... ok
+test_comma_after_eight_words (test_sentences.SentenceTests.test_comma_after_eight_words) ... ok
+test_decimal_split_across_tokens (test_sentences.SentenceTests.test_decimal_split_across_tokens) ... ok
+test_long_unpunctuated_text_is_bounded (test_sentences.SentenceTests.test_long_unpunctuated_text_is_bounded) ... ok
+test_short_comma_waits (test_sentences.SentenceTests.test_short_comma_waits) ... ok
+test_token_boundaries_and_multiple_sentences (test_sentences.SentenceTests.test_token_boundaries_and_multiple_sentences) ... ok
+test_unbroken_long_word (test_sentences.SentenceTests.test_unbroken_long_word) ... ok
+test_barge_requires_ten_frames_and_preserves_them (test_vad.VadTests.test_barge_requires_ten_frames_and_preserves_them) ... ok
+test_cough_does_not_interrupt (test_vad.VadTests.test_cough_does_not_interrupt) ... ok
+test_endpoint_rounds_500ms_to_512ms (test_vad.VadTests.test_endpoint_rounds_500ms_to_512ms) ... ok
+test_energy_gate_blocks_echo (test_vad.VadTests.test_energy_gate_blocks_echo) ... ok
+test_half_duplex_ignores_speech_while_busy (test_vad.VadTests.test_half_duplex_ignores_speech_while_busy) ... ok
+test_maximum_turn_duration_is_bounded (test_vad.VadTests.test_maximum_turn_duration_is_bounded) ... ok
+test_preroll_includes_up_to_seven_frames (test_vad.VadTests.test_preroll_includes_up_to_seven_frames) ... ok
+test_short_speech_is_discarded (test_vad.VadTests.test_short_speech_is_discarded) ... ok
+test_start_requires_two_frames (test_vad.VadTests.test_start_requires_two_frames) ... ok
+
+----------------------------------------------------------------------
+Ran 52 tests in 1.674s
+
+OK

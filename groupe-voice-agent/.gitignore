@@ -1,0 +1,68 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+build/
+coverage/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE and OS
+.vscode/
+.idea/
+.vs/
+.DS_Store
+Thumbs.db
+
+# Generated or heavyweight artifacts
+*.log
+*.tmp
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.ckpt
+*.safetensors
+*.gguf
+*.onnx
+models/
+outputs/
+
+# Local tooling
+.mcp.json
+.claude/
+.playwright-mcp/
+
+# Configurations figées par prepare : chemins propres à la machine
+*.lock.yaml
+*.models.json
+config.cpu.yaml
+
+# Traces : seules les sessions de validation livrées sont versionnées
+runs/*
+!runs/.gitkeep
+!runs/validation-simulated/
+!runs/validation-replay/
+!runs/validation-interruptions/
+!runs/validation-text/
+
+# Enregistrements personnels (voix), bruit ambiant
+eval/corpus/*.wav
+eval/noise/*.wav

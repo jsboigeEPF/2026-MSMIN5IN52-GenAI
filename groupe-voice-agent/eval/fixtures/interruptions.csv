@@ -1,0 +1,3 @@
+file,expected,experiment
+interrupt.wav,true,E3
+cough.wav,false,E4

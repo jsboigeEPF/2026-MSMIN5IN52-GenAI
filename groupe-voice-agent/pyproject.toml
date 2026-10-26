@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voiceagent-fr"
+version = "0.1.0"
+description = "Agent vocal local français, interruptible et instrumenté"
+requires-python = ">=3.11,<3.13"
+license = { file = "LICENCE.md" }
+authors = [{ name = "Nicolas Danquigny" }, { name = "Quentin Dufour" }]
+dependencies = ["numpy>=1.26,<3", "PyYAML>=6,<7", "httpx>=0.28,<0.29"]
+
+[project.scripts]
+voiceagent = "voiceagent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["voiceagent*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 96
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]

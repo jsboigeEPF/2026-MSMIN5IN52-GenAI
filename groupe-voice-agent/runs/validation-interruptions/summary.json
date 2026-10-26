@@ -1,0 +1,119 @@
+{
+  "groups": {
+    "simulated/local": {
+      "endpoint_ms": {
+        "n": 0
+      },
+      "stt_ms": {
+        "n": 0
+      },
+      "llm_first_token_ms": {
+        "n": 0
+      },
+      "sentence_ms": {
+        "n": 2,
+        "min": 0.080451,
+        "max": 0.725581,
+        "p50": 0.40301600000000004,
+        "p95": 0.6933245,
+        "p50_ci_low": 0.080451,
+        "p50_ci_high": 0.725581,
+        "p95_reliable": false
+      },
+      "tts_ms": {
+        "n": 2,
+        "min": 5.625934,
+        "max": 6.166427,
+        "p50": 5.8961805,
+        "p95": 6.139402349999999,
+        "p50_ci_low": 5.625934,
+        "p50_ci_high": 6.166427,
+        "p95_reliable": false
+      },
+      "playback_ms": {
+        "n": 2,
+        "min": 0.10649,
+        "max": 0.132049,
+        "p50": 0.1192695,
+        "p95": 0.13077105,
+        "p50_ci_low": 0.10649,
+        "p50_ci_high": 0.132049,
+        "p95_reliable": false
+      },
+      "response_ms": {
+        "n": 0
+      },
+      "text_response_ms": {
+        "n": 2,
+        "min": 6.480119,
+        "max": 6.704647,
+        "p50": 6.592383,
+        "p95": 6.6934206,
+        "p50_ci_low": 6.480119,
+        "p50_ci_high": 6.704647,
+        "p95_reliable": false
+      },
+      "stop_ms": {
+        "n": 1,
+        "min": 0.035283,
+        "max": 0.035283,
+        "p50": 0.035283,
+        "p95": 0.035283,
+        "p50_ci_low": 0.035283,
+        "p50_ci_high": 0.035283,
+        "p95_reliable": false
+      },
+      "turns": 2,
+      "completed": 0
+    }
+  },
+  "interruptions": {
+    "simulated/E3": {
+      "handled": {
+        "n": 1,
+        "rate": 1.0,
+        "ci_low": 0.20654931437723745,
+        "ci_high": 1.0
+      },
+      "missed": {
+        "n": 1,
+        "rate": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.7934506856227626
+      },
+      "false": {
+        "n": 0,
+        "rate": null,
+        "ci_low": null,
+        "ci_high": null
+      }
+    },
+    "simulated/E4": {
+      "handled": {
+        "n": 0,
+        "rate": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "missed": {
+        "n": 0,
+        "rate": null,
+        "ci_low": null,
+        "ci_high": null
+      },
+      "false": {
+        "n": 1,
+        "rate": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.7934506856227626
+      }
+    }
+  },
+  "wer": {},
+  "memory": {
+    "device_used_mib": null,
+    "torch_peak_mib": null
+  },
+  "cost_eur": 0.0,
+  "warning": "p95 peu fiable pour n < 20. Les simulations ne valident pas le matériel."
+}

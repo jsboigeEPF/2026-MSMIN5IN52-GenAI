@@ -1,0 +1,8 @@
+# Dépendances directes épinglées. Python 3.11 ou 3.12.
+numpy==2.2.6
+PyYAML==6.0.3
+httpx==0.28.1
+scipy==1.15.3
+matplotlib==3.10.3
+jiwer==4.0.0
+sounddevice==0.5.2

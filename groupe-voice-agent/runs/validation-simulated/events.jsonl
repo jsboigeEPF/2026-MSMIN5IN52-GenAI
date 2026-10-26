@@ -1,0 +1,149 @@
+{"t_ns": 1475092179538, "session": "validation-simulated", "turn": 0, "event": "session_start", "route": "local", "mode": "simulated", "data": {"mode": "simulated", "wall_time": "2026-09-29T19:25:37.382746+00:00"}}
+{"t_ns": 1475097676227, "session": "validation-simulated", "turn": 0, "event": "configuration", "route": "local", "mode": "simulated", "data": {"config": {"seed": 42, "runs_dir": "runs", "turn_timeout_s": 120, "audio": {"sample_rate": 16000, "output_rate": 24000, "block_ms": 32, "output_block_ms": 20, "input_device": null, "output_device": null, "capture_queue": 64, "half_duplex": false}, "vad": {"threshold": 0.5, "barge_threshold": 0.7, "start_ms": 64, "barge_ms": 300, "silence_ms": 500, "preroll_ms": 200, "min_speech_ms": 300, "max_speech_s": 30, "energy_gate": true, "echo_attenuation_db": -10, "energy_margin_db": 6}, "stt": {"model": "mobiuslabsgmbh/faster-whisper-large-v3-turbo", "revision": "main", "device": "cuda", "compute_type": "int8_float16", "beam_size": 1}, "llm": {"url": "http://127.0.0.1:11434", "model": "qwen2.5:3b-instruct-q4_K_M", "expected_digest": null, "timeout_s": 60, "history_turns": 6, "num_ctx": 2048, "max_tokens": 256, "temperature": 0.2, "max_sentence_chars": 180, "system_prompt": "Tu es un assistant vocal français. Réponds en français, clairement et brièvement. Fais des phrases courtes, sans Markdown. Réponds directement à la question."}, "tts": {"engine": "kokoro", "device": "cuda", "voice": "ff_siwis", "repo": "hexgrad/Kokoro-82M", "revision": "main", "piper_model": "models/fr_FR-siwis-medium.onnx", "speed": 1}}, "packages": {"python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]", "numpy": "2.3.5", "torch": null, "kokoro": null, "faster-whisper": null, "silero-vad": null, "sounddevice": null, "httpx": "0.28.1", "jiwer": "4.0.0", "piper-tts": null, "ctranslate2": null, "onnxruntime": null}}}
+{"t_ns": 1475100617607, "session": "validation-simulated", "turn": 0, "event": "warmup_start", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1475181806474, "session": "validation-simulated", "turn": 0, "event": "warmup_done", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1475184638289, "session": "validation-simulated", "turn": 0, "event": "memory_sample", "route": "local", "mode": "simulated", "data": {"device_used_mib": null, "torch_peak_mib": null}}
+{"t_ns": 1475248111524, "session": "validation-simulated", "turn": 1, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "user_speaking"}}
+{"t_ns": 1475182806960, "session": "validation-simulated", "turn": 1, "event": "speech_start", "route": "local", "mode": "simulated", "data": {"probability": 0.95}}
+{"t_ns": 1475630806960, "session": "validation-simulated", "turn": 1, "event": "speech_end_real", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1476142806960, "session": "validation-simulated", "turn": 1, "event": "vad_endpoint", "route": "local", "mode": "simulated", "data": {"duration_ms": 448.0}}
+{"t_ns": 1476150663792, "session": "validation-simulated", "turn": 1, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "thinking"}}
+{"t_ns": 1476154970719, "session": "validation-simulated", "turn": 1, "event": "stt_done", "route": "local", "mode": "simulated", "data": {"text": "Explique-moi ce qu'est un VAD.", "language": "fr", "audio_duration_s": 0.448}}
+{"t_ns": 1476158231089, "session": "validation-simulated", "turn": 1, "event": "llm_first_token", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1476186576840, "session": "validation-simulated", "turn": 0, "event": "memory_sample", "route": "local", "mode": "simulated", "data": {"device_used_mib": null, "torch_peak_mib": null}}
+{"t_ns": 1476190936556, "session": "validation-simulated", "turn": 1, "event": "llm_first_sentence", "route": "local", "mode": "simulated", "data": {"sentence": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1476196354947, "session": "validation-simulated", "turn": 1, "event": "tts_first_chunk", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1476196396329, "session": "validation-simulated", "turn": 1, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "speaking"}}
+{"t_ns": 1476196407356, "session": "validation-simulated", "turn": 1, "event": "playback_start", "route": "local", "mode": "simulated", "data": {"clock": "simulated"}}
+{"t_ns": 1476196409579, "session": "validation-simulated", "turn": 1, "event": "playback_chunk_start", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1476225889908, "session": "validation-simulated", "turn": 1, "event": "llm_done", "route": "local", "mode": "simulated", "data": {"stream_chunks": 22, "tokens": null}}
+{"t_ns": 1476297560255, "session": "validation-simulated", "turn": 1, "event": "played_chunk", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1476297593996, "session": "validation-simulated", "turn": 1, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "speaking"}}
+{"t_ns": 1476297606184, "session": "validation-simulated", "turn": 1, "event": "playback_chunk_start", "route": "local", "mode": "simulated", "data": {"text": "Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1476398009769, "session": "validation-simulated", "turn": 1, "event": "played_chunk", "route": "local", "mode": "simulated", "data": {"text": "Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1476398049359, "session": "validation-simulated", "turn": 1, "event": "playback_end", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio. Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1476398081267, "session": "validation-simulated", "turn": 1, "event": "turn_done", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1476398099424, "session": "validation-simulated", "turn": 1, "event": "history_commit", "route": "local", "mode": "simulated", "data": {"user": "Explique-moi ce qu'est un VAD.", "assistant": "Un VAD détecte les passages de parole dans un signal audio. Il aide l'agent à repérer la fin de ta question.", "granularity": "completed_synthesis_units", "interrupted": false}}
+{"t_ns": 1476398107426, "session": "validation-simulated", "turn": 1, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "listening"}}
+{"t_ns": 1476462656713, "session": "validation-simulated", "turn": 2, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "user_speaking"}}
+{"t_ns": 1476398173736, "session": "validation-simulated", "turn": 2, "event": "speech_start", "route": "local", "mode": "simulated", "data": {"probability": 0.95}}
+{"t_ns": 1477188393228, "session": "validation-simulated", "turn": 0, "event": "memory_sample", "route": "local", "mode": "simulated", "data": {"device_used_mib": null, "torch_peak_mib": null}}
+{"t_ns": 1476846173736, "session": "validation-simulated", "turn": 2, "event": "speech_end_real", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1477358173736, "session": "validation-simulated", "turn": 2, "event": "vad_endpoint", "route": "local", "mode": "simulated", "data": {"duration_ms": 448.0}}
+{"t_ns": 1477365807753, "session": "validation-simulated", "turn": 2, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "thinking"}}
+{"t_ns": 1477370074769, "session": "validation-simulated", "turn": 2, "event": "stt_done", "route": "local", "mode": "simulated", "data": {"text": "Explique-moi ce qu'est un VAD.", "language": "fr", "audio_duration_s": 0.448}}
+{"t_ns": 1477373292455, "session": "validation-simulated", "turn": 2, "event": "llm_first_token", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1477404618083, "session": "validation-simulated", "turn": 2, "event": "llm_first_sentence", "route": "local", "mode": "simulated", "data": {"sentence": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1477410041256, "session": "validation-simulated", "turn": 2, "event": "tts_first_chunk", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1477410078522, "session": "validation-simulated", "turn": 2, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "speaking"}}
+{"t_ns": 1477410086264, "session": "validation-simulated", "turn": 2, "event": "playback_start", "route": "local", "mode": "simulated", "data": {"clock": "simulated"}}
+{"t_ns": 1477410088697, "session": "validation-simulated", "turn": 2, "event": "playback_chunk_start", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1477439702984, "session": "validation-simulated", "turn": 2, "event": "llm_done", "route": "local", "mode": "simulated", "data": {"stream_chunks": 22, "tokens": null}}
+{"t_ns": 1477511073649, "session": "validation-simulated", "turn": 2, "event": "played_chunk", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1477511113879, "session": "validation-simulated", "turn": 2, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "speaking"}}
+{"t_ns": 1477511123684, "session": "validation-simulated", "turn": 2, "event": "playback_chunk_start", "route": "local", "mode": "simulated", "data": {"text": "Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1477611451577, "session": "validation-simulated", "turn": 2, "event": "played_chunk", "route": "local", "mode": "simulated", "data": {"text": "Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1477611487501, "session": "validation-simulated", "turn": 2, "event": "playback_end", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio. Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1477611517046, "session": "validation-simulated", "turn": 2, "event": "turn_done", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1477611533170, "session": "validation-simulated", "turn": 2, "event": "history_commit", "route": "local", "mode": "simulated", "data": {"user": "Explique-moi ce qu'est un VAD.", "assistant": "Un VAD détecte les passages de parole dans un signal audio. Il aide l'agent à repérer la fin de ta question.", "granularity": "completed_synthesis_units", "interrupted": false}}
+{"t_ns": 1477611541483, "session": "validation-simulated", "turn": 2, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "listening"}}
+{"t_ns": 1477676079626, "session": "validation-simulated", "turn": 3, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "user_speaking"}}
+{"t_ns": 1477611578398, "session": "validation-simulated", "turn": 3, "event": "speech_start", "route": "local", "mode": "simulated", "data": {"probability": 0.95}}
+{"t_ns": 1478191395621, "session": "validation-simulated", "turn": 0, "event": "memory_sample", "route": "local", "mode": "simulated", "data": {"device_used_mib": null, "torch_peak_mib": null}}
+{"t_ns": 1478059578398, "session": "validation-simulated", "turn": 3, "event": "speech_end_real", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1478571578398, "session": "validation-simulated", "turn": 3, "event": "vad_endpoint", "route": "local", "mode": "simulated", "data": {"duration_ms": 448.0}}
+{"t_ns": 1478578358506, "session": "validation-simulated", "turn": 3, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "thinking"}}
+{"t_ns": 1478582642799, "session": "validation-simulated", "turn": 3, "event": "stt_done", "route": "local", "mode": "simulated", "data": {"text": "Explique-moi ce qu'est un VAD.", "language": "fr", "audio_duration_s": 0.448}}
+{"t_ns": 1478585879774, "session": "validation-simulated", "turn": 3, "event": "llm_first_token", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1478617613297, "session": "validation-simulated", "turn": 3, "event": "llm_first_sentence", "route": "local", "mode": "simulated", "data": {"sentence": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1478623037306, "session": "validation-simulated", "turn": 3, "event": "tts_first_chunk", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1478623084788, "session": "validation-simulated", "turn": 3, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "speaking"}}
+{"t_ns": 1478623092409, "session": "validation-simulated", "turn": 3, "event": "playback_start", "route": "local", "mode": "simulated", "data": {"clock": "simulated"}}
+{"t_ns": 1478623095404, "session": "validation-simulated", "turn": 3, "event": "playback_chunk_start", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1478652639725, "session": "validation-simulated", "turn": 3, "event": "llm_done", "route": "local", "mode": "simulated", "data": {"stream_chunks": 22, "tokens": null}}
+{"t_ns": 1478723994771, "session": "validation-simulated", "turn": 3, "event": "played_chunk", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1478724058146, "session": "validation-simulated", "turn": 3, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "speaking"}}
+{"t_ns": 1478724066879, "session": "validation-simulated", "turn": 3, "event": "playback_chunk_start", "route": "local", "mode": "simulated", "data": {"text": "Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1478824329226, "session": "validation-simulated", "turn": 3, "event": "played_chunk", "route": "local", "mode": "simulated", "data": {"text": "Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1478824366512, "session": "validation-simulated", "turn": 3, "event": "playback_end", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio. Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1478824394054, "session": "validation-simulated", "turn": 3, "event": "turn_done", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1478824406933, "session": "validation-simulated", "turn": 3, "event": "history_commit", "route": "local", "mode": "simulated", "data": {"user": "Explique-moi ce qu'est un VAD.", "assistant": "Un VAD détecte les passages de parole dans un signal audio. Il aide l'agent à repérer la fin de ta question.", "granularity": "completed_synthesis_units", "interrupted": false}}
+{"t_ns": 1478824414725, "session": "validation-simulated", "turn": 3, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "listening"}}
+{"t_ns": 1478888920452, "session": "validation-simulated", "turn": 4, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "user_speaking"}}
+{"t_ns": 1478824457339, "session": "validation-simulated", "turn": 4, "event": "speech_start", "route": "local", "mode": "simulated", "data": {"probability": 0.95}}
+{"t_ns": 1479193746163, "session": "validation-simulated", "turn": 0, "event": "memory_sample", "route": "local", "mode": "simulated", "data": {"device_used_mib": null, "torch_peak_mib": null}}
+{"t_ns": 1479272457339, "session": "validation-simulated", "turn": 4, "event": "speech_end_real", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1479784457339, "session": "validation-simulated", "turn": 4, "event": "vad_endpoint", "route": "local", "mode": "simulated", "data": {"duration_ms": 448.0}}
+{"t_ns": 1479794194499, "session": "validation-simulated", "turn": 4, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "thinking"}}
+{"t_ns": 1479798479483, "session": "validation-simulated", "turn": 4, "event": "stt_done", "route": "local", "mode": "simulated", "data": {"text": "Explique-moi ce qu'est un VAD.", "language": "fr", "audio_duration_s": 0.448}}
+{"t_ns": 1479801699273, "session": "validation-simulated", "turn": 4, "event": "llm_first_token", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1479833467919, "session": "validation-simulated", "turn": 4, "event": "llm_first_sentence", "route": "local", "mode": "simulated", "data": {"sentence": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1479838904296, "session": "validation-simulated", "turn": 4, "event": "tts_first_chunk", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1479838944988, "session": "validation-simulated", "turn": 4, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "speaking"}}
+{"t_ns": 1479838955073, "session": "validation-simulated", "turn": 4, "event": "playback_start", "route": "local", "mode": "simulated", "data": {"clock": "simulated"}}
+{"t_ns": 1479838957406, "session": "validation-simulated", "turn": 4, "event": "playback_chunk_start", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1479868621794, "session": "validation-simulated", "turn": 4, "event": "llm_done", "route": "local", "mode": "simulated", "data": {"stream_chunks": 22, "tokens": null}}
+{"t_ns": 1479940108183, "session": "validation-simulated", "turn": 4, "event": "played_chunk", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1479940619072, "session": "validation-simulated", "turn": 4, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "speaking"}}
+{"t_ns": 1479940636278, "session": "validation-simulated", "turn": 4, "event": "playback_chunk_start", "route": "local", "mode": "simulated", "data": {"text": "Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1480040908580, "session": "validation-simulated", "turn": 4, "event": "played_chunk", "route": "local", "mode": "simulated", "data": {"text": "Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1480040958496, "session": "validation-simulated", "turn": 4, "event": "playback_end", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio. Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1480040993368, "session": "validation-simulated", "turn": 4, "event": "turn_done", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1480041007890, "session": "validation-simulated", "turn": 4, "event": "history_commit", "route": "local", "mode": "simulated", "data": {"user": "Explique-moi ce qu'est un VAD.", "assistant": "Un VAD détecte les passages de parole dans un signal audio. Il aide l'agent à repérer la fin de ta question.", "granularity": "completed_synthesis_units", "interrupted": false}}
+{"t_ns": 1480041016162, "session": "validation-simulated", "turn": 4, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "listening"}}
+{"t_ns": 1480105561274, "session": "validation-simulated", "turn": 5, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "user_speaking"}}
+{"t_ns": 1480041063223, "session": "validation-simulated", "turn": 5, "event": "speech_start", "route": "local", "mode": "simulated", "data": {"probability": 0.95}}
+{"t_ns": 1480195849519, "session": "validation-simulated", "turn": 0, "event": "memory_sample", "route": "local", "mode": "simulated", "data": {"device_used_mib": null, "torch_peak_mib": null}}
+{"t_ns": 1480489063223, "session": "validation-simulated", "turn": 5, "event": "speech_end_real", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1481001063223, "session": "validation-simulated", "turn": 5, "event": "vad_endpoint", "route": "local", "mode": "simulated", "data": {"duration_ms": 448.0}}
+{"t_ns": 1481009033823, "session": "validation-simulated", "turn": 5, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "thinking"}}
+{"t_ns": 1481013290113, "session": "validation-simulated", "turn": 5, "event": "stt_done", "route": "local", "mode": "simulated", "data": {"text": "Explique-moi ce qu'est un VAD.", "language": "fr", "audio_duration_s": 0.448}}
+{"t_ns": 1481016505996, "session": "validation-simulated", "turn": 5, "event": "llm_first_token", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1481047920178, "session": "validation-simulated", "turn": 5, "event": "llm_first_sentence", "route": "local", "mode": "simulated", "data": {"sentence": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1481053847580, "session": "validation-simulated", "turn": 5, "event": "tts_first_chunk", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1481053888332, "session": "validation-simulated", "turn": 5, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "speaking"}}
+{"t_ns": 1481053898287, "session": "validation-simulated", "turn": 5, "event": "playback_start", "route": "local", "mode": "simulated", "data": {"clock": "simulated"}}
+{"t_ns": 1481053900900, "session": "validation-simulated", "turn": 5, "event": "playback_chunk_start", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1481083331565, "session": "validation-simulated", "turn": 5, "event": "llm_done", "route": "local", "mode": "simulated", "data": {"stream_chunks": 22, "tokens": null}}
+{"t_ns": 1481154254501, "session": "validation-simulated", "turn": 5, "event": "played_chunk", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1481154297095, "session": "validation-simulated", "turn": 5, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "speaking"}}
+{"t_ns": 1481154312569, "session": "validation-simulated", "turn": 5, "event": "playback_chunk_start", "route": "local", "mode": "simulated", "data": {"text": "Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1481201679892, "session": "validation-simulated", "turn": 0, "event": "memory_sample", "route": "local", "mode": "simulated", "data": {"device_used_mib": null, "torch_peak_mib": null}}
+{"t_ns": 1481254901478, "session": "validation-simulated", "turn": 5, "event": "played_chunk", "route": "local", "mode": "simulated", "data": {"text": "Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1481254938393, "session": "validation-simulated", "turn": 5, "event": "playback_end", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio. Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1481254966926, "session": "validation-simulated", "turn": 5, "event": "turn_done", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1481254984132, "session": "validation-simulated", "turn": 5, "event": "history_commit", "route": "local", "mode": "simulated", "data": {"user": "Explique-moi ce qu'est un VAD.", "assistant": "Un VAD détecte les passages de parole dans un signal audio. Il aide l'agent à repérer la fin de ta question.", "granularity": "completed_synthesis_units", "interrupted": false}}
+{"t_ns": 1481254994067, "session": "validation-simulated", "turn": 5, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "listening"}}
+{"t_ns": 1481255282622, "session": "validation-simulated", "turn": 6, "event": "text_input", "route": "local", "mode": "simulated", "data": {"text": "Raconte-moi l'histoire d'Internet."}}
+{"t_ns": 1481255342542, "session": "validation-simulated", "turn": 6, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "thinking"}}
+{"t_ns": 1481258542241, "session": "validation-simulated", "turn": 6, "event": "llm_first_token", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1481290132969, "session": "validation-simulated", "turn": 6, "event": "llm_first_sentence", "route": "local", "mode": "simulated", "data": {"sentence": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1481295646804, "session": "validation-simulated", "turn": 6, "event": "tts_first_chunk", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1481295686393, "session": "validation-simulated", "turn": 6, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "speaking"}}
+{"t_ns": 1481295695818, "session": "validation-simulated", "turn": 6, "event": "playback_start", "route": "local", "mode": "simulated", "data": {"clock": "simulated"}}
+{"t_ns": 1481295698421, "session": "validation-simulated", "turn": 6, "event": "playback_chunk_start", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1481325237745, "session": "validation-simulated", "turn": 6, "event": "llm_done", "route": "local", "mode": "simulated", "data": {"stream_chunks": 22, "tokens": null}}
+{"t_ns": 1481375652320, "session": "validation-simulated", "turn": 6, "event": "barge_in_detected", "route": "local", "mode": "simulated", "data": {"reason": "demo"}}
+{"t_ns": 1481375728866, "session": "validation-simulated", "turn": 6, "event": "playback_stopped", "route": "local", "mode": "simulated", "data": {"clock": "host_abort_ack", "stop_ms": 0.076546}}
+{"t_ns": 1481375899903, "session": "validation-simulated", "turn": 6, "event": "turn_cancelled", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1481375909848, "session": "validation-simulated", "turn": 6, "event": "history_commit", "route": "local", "mode": "simulated", "data": {"user": "Raconte-moi l'histoire d'Internet.", "assistant": "[interrompu]", "granularity": "completed_synthesis_units", "interrupted": true}}
+{"t_ns": 1481375917099, "session": "validation-simulated", "turn": 6, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "listening"}}
+{"t_ns": 1481375939914, "session": "validation-simulated", "turn": 6, "event": "barge_in", "route": "local", "mode": "simulated", "data": {"detected_ns": 1481375652320, "stopped_ns": 1481375728866}}
+{"t_ns": 1481375945041, "session": "validation-simulated", "turn": 7, "event": "text_input", "route": "local", "mode": "simulated", "data": {"text": "Stop, plutôt le Web."}}
+{"t_ns": 1481376035508, "session": "validation-simulated", "turn": 7, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "thinking"}}
+{"t_ns": 1481379374627, "session": "validation-simulated", "turn": 7, "event": "llm_first_token", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1481411063620, "session": "validation-simulated", "turn": 7, "event": "llm_first_sentence", "route": "local", "mode": "simulated", "data": {"sentence": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1481416590234, "session": "validation-simulated", "turn": 7, "event": "tts_first_chunk", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1481416631546, "session": "validation-simulated", "turn": 7, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "speaking"}}
+{"t_ns": 1481416641140, "session": "validation-simulated", "turn": 7, "event": "playback_start", "route": "local", "mode": "simulated", "data": {"clock": "simulated"}}
+{"t_ns": 1481416643303, "session": "validation-simulated", "turn": 7, "event": "playback_chunk_start", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1481445986116, "session": "validation-simulated", "turn": 7, "event": "llm_done", "route": "local", "mode": "simulated", "data": {"stream_chunks": 22, "tokens": null}}
+{"t_ns": 1481517424693, "session": "validation-simulated", "turn": 7, "event": "played_chunk", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio."}}
+{"t_ns": 1481517472014, "session": "validation-simulated", "turn": 7, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "speaking"}}
+{"t_ns": 1481517490953, "session": "validation-simulated", "turn": 7, "event": "playback_chunk_start", "route": "local", "mode": "simulated", "data": {"text": "Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1481617858978, "session": "validation-simulated", "turn": 7, "event": "played_chunk", "route": "local", "mode": "simulated", "data": {"text": "Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1481617901131, "session": "validation-simulated", "turn": 7, "event": "playback_end", "route": "local", "mode": "simulated", "data": {"text": "Un VAD détecte les passages de parole dans un signal audio. Il aide l'agent à repérer la fin de ta question."}}
+{"t_ns": 1481617936905, "session": "validation-simulated", "turn": 7, "event": "turn_done", "route": "local", "mode": "simulated", "data": {}}
+{"t_ns": 1481617953270, "session": "validation-simulated", "turn": 7, "event": "history_commit", "route": "local", "mode": "simulated", "data": {"user": "Stop, plutôt le Web.", "assistant": "Un VAD détecte les passages de parole dans un signal audio. Il aide l'agent à repérer la fin de ta question.", "granularity": "completed_synthesis_units", "interrupted": false}}
+{"t_ns": 1481617962193, "session": "validation-simulated", "turn": 7, "event": "state", "route": "local", "mode": "simulated", "data": {"state": "listening"}}
+{"t_ns": 1481618203627, "session": "validation-simulated", "turn": 0, "event": "session_end", "route": "local", "mode": "simulated", "data": {}}

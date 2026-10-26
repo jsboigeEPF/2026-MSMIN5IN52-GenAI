@@ -1,0 +1,10 @@
+group,max,metric,min,n,p50,p50_ci_high,p50_ci_low,p95,p95_reliable
+simulated/local,,endpoint_ms,,0,,,,,
+simulated/local,,stt_ms,,0,,,,,
+simulated/local,,llm_first_token_ms,,0,,,,,
+simulated/local,0.725581,sentence_ms,0.080451,2,0.40301600000000004,0.725581,0.080451,0.6933245,False
+simulated/local,6.166427,tts_ms,5.625934,2,5.8961805,6.166427,5.625934,6.139402349999999,False
+simulated/local,0.132049,playback_ms,0.10649,2,0.1192695,0.132049,0.10649,0.13077105,False
+simulated/local,,response_ms,,0,,,,,
+simulated/local,6.704647,text_response_ms,6.480119,2,6.592383,6.704647,6.480119,6.6934206,False
+simulated/local,0.035283,stop_ms,0.035283,1,0.035283,0.035283,0.035283,0.035283,False

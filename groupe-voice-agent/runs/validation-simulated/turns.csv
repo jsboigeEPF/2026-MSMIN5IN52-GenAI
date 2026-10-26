@@ -1,0 +1,8 @@
+endpoint_ms,llm_first_token_ms,mode,playback_ms,response_ms,route,sentence_ms,session,status,stop_ms,stt_ms,text_response_ms,tts_ms,turn
+512.0,3.26037,simulated,0.052409,565.600396,local,32.705467,validation-simulated,complete,,12.163759,,5.418391,1
+512.0,3.217686,simulated,0.045008,563.912528,local,31.325628,validation-simulated,complete,,11.901033,,5.423173,2
+512.0,3.236975,simulated,0.055103,563.514011,local,31.733523,validation-simulated,complete,,11.064401,,5.424009,3
+512.0,3.21979,simulated,0.050777,566.497734,local,31.768646,validation-simulated,complete,,14.022144,,5.436377,4
+512.0,3.215883,simulated,0.050707,564.835064,local,31.414182,validation-simulated,complete,,12.22689,,5.927402,5
+,,simulated,0.049014,,local,31.590728,validation-simulated,interrupted,0.076546,,40.413196,5.513835,6
+,,simulated,0.050906,,local,31.688993,validation-simulated,complete,,,40.696099,5.526614,7

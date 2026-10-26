@@ -1,0 +1,56 @@
+{
+  "seed": 42,
+  "runs_dir": "runs",
+  "turn_timeout_s": 120,
+  "audio": {
+    "sample_rate": 16000,
+    "output_rate": 24000,
+    "block_ms": 32,
+    "output_block_ms": 20,
+    "input_device": null,
+    "output_device": null,
+    "capture_queue": 64,
+    "half_duplex": false
+  },
+  "vad": {
+    "threshold": 0.5,
+    "barge_threshold": 0.7,
+    "start_ms": 64,
+    "barge_ms": 300,
+    "silence_ms": 500,
+    "preroll_ms": 200,
+    "min_speech_ms": 300,
+    "max_speech_s": 30,
+    "energy_gate": true,
+    "echo_attenuation_db": -10,
+    "energy_margin_db": 6
+  },
+  "stt": {
+    "model": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+    "revision": "main",
+    "device": "cuda",
+    "compute_type": "int8_float16",
+    "beam_size": 1
+  },
+  "llm": {
+    "url": "http://127.0.0.1:11434",
+    "model": "qwen2.5:3b-instruct-q4_K_M",
+    "expected_digest": null,
+    "timeout_s": 60,
+    "history_turns": 6,
+    "num_ctx": 2048,
+    "max_tokens": 256,
+    "temperature": 0.2,
+    "max_sentence_chars": 180,
+    "system_prompt": "Tu es un assistant vocal français. Réponds en français, clairement et brièvement. Fais des phrases courtes, sans Markdown. Réponds directement à la question."
+  },
+  "tts": {
+    "engine": "kokoro",
+    "device": "cuda",
+    "voice": "ff_siwis",
+    "repo": "hexgrad/Kokoro-82M",
+    "revision": "main",
+    "piper_model": "models/fr_FR-siwis-medium.onnx",
+    "speed": 1
+  }
+}

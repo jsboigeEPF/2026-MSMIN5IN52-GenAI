@@ -1,0 +1,2 @@
+endpoint_ms,errors,file,llm_first_token_ms,mode,noise,playback_ms,response_ms,route,sentence_ms,session,snr_db,source,status,stt_ms,tts_ms,turn,wer,words
+512.0,0,tone.wav,3.234236,simulated,pink,0.080141,558.15291,local,31.913236,validation-replay,10.0,simulated-tone,complete,5.068571,5.856726,1,0.0,3

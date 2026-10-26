@@ -1,0 +1,3 @@
+mode,playback_ms,route,sentence_ms,session,status,stop_ms,text_response_ms,tts_ms,turn
+simulated,0.132049,local,0.725581,validation-interruptions,interrupted,0.035283,6.704647,5.625934,1
+simulated,0.10649,local,0.080451,validation-interruptions,interrupted,,6.480119,6.166427,2

@@ -1,0 +1,11 @@
+file,expected,experiment,instruction,source
+stop.wav,true,E3,"Stop, arrête ta réponse.",human
+attends.wav,true,E3,"Attends, je change de question.",human
+non.wav,true,E3,"Non, plutôt le Web.",human
+pause.wav,true,E3,Fais une pause maintenant.,human
+change.wav,true,E3,Je voudrais parler d’autre chose.,human
+cough.wav,false,E4,"Toux brève, moins de 300 ms.",human
+euh.wav,false,E4,"Euh bref, moins de 300 ms.",human
+clap.wav,false,E4,Un claquement de mains bref.,human
+click.wav,false,E4,Un clic de souris bref.,human
+throat.wav,false,E4,Raclement de gorge bref.,human

@@ -1,0 +1,41 @@
+file,reference,source
+human_01.wav,Explique-moi en deux phrases ce qu'est un VAD.,human
+human_02.wav,Quelle est la différence entre Internet et le Web ?,human
+human_03.wav,Pourquoi le ciel paraît-il bleu ?,human
+human_04.wav,Comment fonctionne une pile électrique ?,human
+human_05.wav,Qu'est-ce qu'un algorithme ?,human
+human_06.wav,Donne-moi une définition simple du machine learning.,human
+human_07.wav,À quoi sert un système d'exploitation ?,human
+human_08.wav,Pourquoi faut-il sauvegarder ses fichiers ?,human
+human_09.wav,Explique le principe de la photosynthèse.,human
+human_10.wav,Comment les abeilles communiquent-elles ?,human
+human_11.wav,Quelle est la différence entre mémoire vive et disque ?,human
+human_12.wav,Qu'est-ce qu'un réseau local ?,human
+human_13.wav,Comment un microphone transforme-t-il le son ?,human
+human_14.wav,À quoi sert une carte graphique ?,human
+human_15.wav,Qu'est-ce que la latence dans une conversation vocale ?,human
+human_16.wav,Explique la compression d'un fichier audio.,human
+human_17.wav,Pourquoi un écho gêne-t-il un assistant vocal ?,human
+human_18.wav,Que signifie une fréquence de seize kilohertz ?,human
+human_19.wav,Comment calculer une moyenne et une médiane ?,human
+human_20.wav,Pourquoi faut-il tester les cas d'erreur ?,human
+synthetic_01.wav,Qu'est-ce qu'une transcription automatique ?,synthetic
+synthetic_02.wav,Explique la synthèse vocale en une phrase.,synthetic
+synthetic_03.wav,Comment distingue-t-on le bruit et la parole ?,synthetic
+synthetic_04.wav,À quoi sert une file d'attente dans un programme ?,synthetic
+synthetic_05.wav,Qu'est-ce que la programmation asynchrone ?,synthetic
+synthetic_06.wav,Pourquoi utilise-t-on une horloge monotone ?,synthetic
+synthetic_07.wav,Explique le rôle d'une graine aléatoire.,synthetic
+synthetic_08.wav,Que signifie le percentile quatre-vingt-quinze ?,synthetic
+synthetic_09.wav,Qu'est-ce qu'un intervalle de confiance ?,synthetic
+synthetic_10.wav,Pourquoi séparer les tests et le code de production ?,synthetic
+synthetic_11.wav,Comment réduire la consommation de mémoire ?,synthetic
+synthetic_12.wav,Quelle est la différence entre un octet et un bit ?,synthetic
+synthetic_13.wav,À quoi sert le protocole HTTP ?,synthetic
+synthetic_14.wav,Comment fonctionne un haut-parleur ?,synthetic
+synthetic_15.wav,Qu'est-ce que le rapport signal sur bruit ?,synthetic
+synthetic_16.wav,Explique ce qu'est une interruption de conversation.,synthetic
+synthetic_17.wav,Pourquoi faut-il attendre la fin d'une phrase ?,synthetic
+synthetic_18.wav,Que peut-on mesurer dans un journal d'événements ?,synthetic
+synthetic_19.wav,Quelle est la différence entre une simulation et une expérience ?,synthetic
+synthetic_20.wav,Comment rendre une expérience reproductible ?,synthetic
