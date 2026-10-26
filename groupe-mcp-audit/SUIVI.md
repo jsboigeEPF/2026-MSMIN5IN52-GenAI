@@ -10,24 +10,43 @@ journal (§6) et, si besoin, les décisions en attente (§5).**
 
 ## 0. Prochaine session : par où commencer
 
-Ordre décidé le 26/10, à la fin de la session 1 :
+**Le rendu est fait : PR n°21 ouverte le 26/10 avant la date limite**
+(https://github.com/jsboigeEPF/2026-MSMIN5IN52-GenAI/pull/21). Chaque push sur
+la branche `groupe-mcp-audit` du fork met la PR à jour. Si l'enseignant l'a
+déjà fusionnée, ouvrir une PR complémentaire. **Tout doit être en place avant
+la soutenance du mercredi 28/10 à 13:15.**
 
-1. ~~Pousser la branche~~ : fait le 26/10, `finalisation-projet` est poussée
-   et fusionnée dans `master`.
-2. **Bloc D, jusqu'à l'ouverture de la PR : obligatoire avant le 26/10 à
-   23:59** (1 h à 1 h 30).
-3. ~~B3 : tests du client avec un faux Ollama~~ : fait le 26/10 (session 2).
-4. ~~B2 : flèches et Ctrl+C~~ : fait le 26/10 (session 2).
-5. B4 : démo de secours sans Ollama (15 min).
-6. Bloc C : résultats Qwen/Mistral dans le README (1 h).
-7. Slides, puis extensions facultatives (OAuth, prompts MCP, Open WebUI),
-   seulement si tout le reste est fait.
+Reste à faire, dans l'ordre :
 
-Suggestions d'un membre du groupe, comparées à l'état actuel : jeu de données
-public ✅ (`sandbox/data/`) ; client avec consentement réel ✅ ; tests des
-contrats, de l'absence d'autorisation et des chemins hostiles ✅ ; tests du
-consentement côté client et des erreurs de transport ✅ (B3, session 2) ; extensions
-facultatives (= point 7).
+1. B4 : démo de secours sans Ollama, c'est-à-dire un client déterministe, le
+   plan B de la fiche B2 (15 min).
+2. Bloc C : mesurer `mistral-nemo:12b` avec le prompt final, puis compléter
+   la section Résultats du README (1 h).
+3. Slides (PDF) dans `slides/`, et préparation de la soutenance (chaque
+   membre doit savoir expliquer architecture, choix, mesures et limites).
+4. Extensions facultatives (OAuth, prompts MCP, Open WebUI), seulement si
+   tout le reste est fait.
+
+### Où travailler (depuis le 26/10)
+
+- **Uniquement dans le fork** `remiLesanne/2026-MSMIN5IN52-GenAI`, branche
+  **`groupe-mcp-audit`**, dossier **`groupe-mcp-audit/`**. Ne rien modifier
+  en dehors de ce dossier (règle de `AGENTS.md` à la racine du dépôt).
+- L'ancien dépôt `GabrielC-star/filesystem_MCP_server` est archivé de fait :
+  tout son historique a été importé ici. Ne plus y travailler.
+- Pour un nouveau membre ou un nouvel ordinateur :
+  ```bash
+  git clone git@github.com:remiLesanne/2026-MSMIN5IN52-GenAI.git
+  cd 2026-MSMIN5IN52-GenAI
+  git checkout groupe-mcp-audit
+  git remote add upstream https://github.com/jsboigeEPF/2026-MSMIN5IN52-GenAI.git
+  cd groupe-mcp-audit   # puis l'installation du §2
+  ```
+- Avant de commencer : `git pull --rebase`. Ensuite : petits commits, puis
+  `git push`. Les deux membres poussent sur la même branche ; prévenir l'autre
+  de ce sur quoi on travaille pour éviter les conflits.
+- Pour pousser, il faut être **collaborateur du fork** (Settings →
+  Collaborators sur GitHub).
 
 ## 1. Contexte en bref
 
@@ -37,9 +56,8 @@ facultatives (= point 7).
   modification. Détails dans le [README](README.md).
 - **Date limite de la PR : lundi 26 octobre 2026, 23:59.** La PR peut être
   complétée après, mais doit être ouverte avant.
-- Le rendu final doit se faire dans un fork du dépôt du cours, dans un dossier
-  `groupe-<nom-court>/` (voir §4, bloc D). Pour l'instant, le travail se fait
-  dans ce dépôt séparé.
+- Le rendu se fait dans le fork `remiLesanne/2026-MSMIN5IN52-GenAI`, dossier
+  `groupe-mcp-audit/`, par la PR n°21 vers le dépôt du cours (voir §0).
 - **Sujet : B2 « Serveur MCP métier audité »** (`docs/CATALOGUE.md` du dépôt
   du cours). MVP : 3 ressources, 3 outils dont une action réversible,
   validation des entrées, journal d'audit. Réussite : tests des contrats,
@@ -59,9 +77,10 @@ facultatives (= point 7).
 ## 2. Commandes
 
 ```bash
-# Installation (une fois)
+# Installation (une fois, depuis le dossier groupe-mcp-audit/)
 python3 -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
 pip install -e .
 
 # Tests automatisés : 29 tests, environ 5 s, sans Ollama ni GPU
@@ -103,9 +122,8 @@ Node 24 (nécessaire pour `mcp dev server.py`, c'est-à-dire MCP Inspector).
   et vérifier que le test échoue.
 - Avancer étape par étape, tester chaque changement, et **demander à
   l'utilisateur** avant tout choix de comportement (voir §5).
-- Git : tout le travail se fait sur la branche **`finalisation-projet`**,
-  fusionnée dans `master` à la fin de chaque session (le 26/10 : fusion
-  rapide, puis push des deux branches). Un commit par changement logique, message en
+- Git : tout le travail se fait dans le fork, branche **`groupe-mcp-audit`**
+  (voir §0). Un commit par changement logique, message en
   français préfixé `test:`, `fix:`, `feat:` ou `docs:`. La mise à jour de ce
   fichier part dans le commit du changement qu'elle décrit.
 - Modèle principal : `qwen3:8b`. `mistral-nemo:12b` sert de comparaison, à
@@ -152,7 +170,7 @@ Plan prévu :
 6. Pousser, puis ouvrir la PR sur le site avec le texte préparé (modèle
    `.github/PULL_REQUEST_TEMPLATE.md` : dossier, sujet B2, membres en
    `@pseudo`, résumé, 10 cases à cocher, démonstration et plan B).
-- [ ] Fork de `jsboigeEPF/2026-MSMIN5IN52-GenAI`, branche de travail, un seul dossier `groupe-<nom-court>/`
+- [x] Fork `remiLesanne/2026-MSMIN5IN52-GenAI`, branche `groupe-mcp-audit`, un seul dossier `groupe-mcp-audit/` (import par `git subtree`, historique conservé)
 - [x] README réécrit selon `template-groupe/README.md` : groupe, sujet B2, architecture, installation, utilisation, tests, résultats (baseline et versions successives, échecs compris), limites et plan B, répartition, agents, licences et références
 - [x] Section « À faire » du README supprimée (le suivi est ici)
 - [x] `.env.example` (aucune variable, expliqué en commentaire), `requirements.txt` (versions exactes)
@@ -161,7 +179,7 @@ Plan prévu :
 - [x] Usage d'agents de code déclaré dans le README (Codex et Claude Code)
 - [x] Limite Windows (`os.pread`) citée dans le README
 - [ ] Slides (PDF), éventuellement dans une PR complémentaire
-- [ ] Ouvrir la PR et remplir sa checklist
+- [x] PR n°21 ouverte et checklist remplie (26/10) : 17 commits, 13 fichiers, tous dans `groupe-mcp-audit/`
 
 ## 5. Décisions en attente (à faire trancher par l'utilisateur)
 
@@ -264,6 +282,18 @@ Plan prévu :
   est à 100 % sur le GPU (bloc C).
 - Fin de session : branche poussée et fusionnée dans `master`. Prochaine
   étape : §0.
+
+### 26/10 — session 2 : bloc D terminé, PR n°21
+- Dépôt du cours cloné, remote `upstream` ; fork de `remiLesanne` en `origin`
+  (SSH). Branche `groupe-mcp-audit` créée depuis `upstream/main` (5cbfabc).
+- `git subtree add --prefix=groupe-mcp-audit <ancien dépôt> finalisation-projet` :
+  17 commits importés, dont les 3 de @GabrielC-star.
+- Vérifié depuis un environnement neuf en suivant le README (`pip install -r
+  requirements.txt && pip install -e .`) : 29 tests OK ; `.venv` et
+  `egg-info` bien ignorés.
+- Branche poussée avec l'accord de l'utilisateur, PR ouverte par lui :
+  https://github.com/jsboigeEPF/2026-MSMIN5IN52-GenAI/pull/21 (vérifiée par
+  l'API : ouverte, pas en brouillon, aucun fichier hors du dossier).
 
 ### 26/10 — session 2 (matin) : bloc D, préparation
 - Décisions de l'utilisateur : dossier **`groupe-mcp-audit`** ; **2 membres**
