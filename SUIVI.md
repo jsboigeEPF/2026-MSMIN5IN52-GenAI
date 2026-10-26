@@ -8,6 +8,26 @@ décrit le travail en cours.
 **Règle : à la fin de chaque étape, mettre à jour la checklist (§4), le
 journal (§6) et, si besoin, les décisions en attente (§5).**
 
+## 0. Prochaine session : par où commencer
+
+Ordre décidé le 26/10, à la fin de la session 1 :
+
+1. Pousser la branche `finalisation-projet` si ce n'est pas fait (2 min).
+2. **Bloc D, jusqu'à l'ouverture de la PR : obligatoire avant le 26/10 à
+   23:59** (1 h à 1 h 30).
+3. B3 : tests du client avec un faux Ollama, consentement et pannes (45 min).
+4. B2 : flèches et Ctrl+C (15 min).
+5. B4 : démo de secours sans Ollama (15 min).
+6. Bloc C : résultats Qwen/Mistral dans le README (1 h).
+7. Slides, puis extensions facultatives (OAuth, prompts MCP, Open WebUI),
+   seulement si tout le reste est fait.
+
+Suggestions d'un membre du groupe, comparées à l'état actuel : jeu de données
+public ✅ (`sandbox/data/`) ; client avec consentement réel ✅ ; tests des
+contrats, de l'absence d'autorisation et des chemins hostiles ✅ ; tests du
+consentement côté client et des erreurs de transport ❌ (= B3) ; extensions
+facultatives (= point 7).
+
 ## 1. Contexte en bref
 
 - Projet de cours (EPF, GenAI) : serveur MCP Python qui donne à un LLM un accès
