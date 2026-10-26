@@ -12,7 +12,8 @@ journal (§6) et, si besoin, les décisions en attente (§5).**
 
 Ordre décidé le 26/10, à la fin de la session 1 :
 
-1. Pousser la branche `finalisation-projet` si ce n'est pas fait (2 min).
+1. ~~Pousser la branche~~ : fait le 26/10, `finalisation-projet` est poussée
+   et fusionnée dans `master`.
 2. **Bloc D, jusqu'à l'ouverture de la PR : obligatoire avant le 26/10 à
    23:59** (1 h à 1 h 30).
 3. B3 : tests du client avec un faux Ollama, consentement et pannes (45 min).
@@ -59,7 +60,8 @@ python demo_client.py --model qwen3:8b
 ollama ps
 ```
 
-Machine de référence : RTX 5060 8 Go, Ollama 0.23.2, Python 3.12, `mcp` 1.30.0.
+Machine de référence : RTX 5060 8 Go, Ollama 0.23.2, Python 3.12, `mcp` 1.30.0,
+Node 24 (nécessaire pour `mcp dev server.py`, c'est-à-dire MCP Inspector).
 
 ## 3. Conventions de travail
 
@@ -71,14 +73,15 @@ Machine de référence : RTX 5060 8 Go, Ollama 0.23.2, Python 3.12, `mcp` 1.30.0
   (`mcp.shared.memory`) pour tester le contrat vu par un client.
 - Les tests ne touchent **jamais** le vrai `sandbox/` : `server.ROOT` et
   `server.AUDIT_FILE` sont redirigés vers un dossier temporaire (voir
-  `SandboxTestCase` dans [tests/test_server.py](tests/test_server.py)).
+  `TestAvecSandbox` dans [tests/test_server.py](tests/test_server.py)).
 - Pour vérifier qu'un test n'est pas creux : désactiver volontairement la
   protection testée (par exemple `mock.patch.object(server, "_require_confirmation", ...)`)
   et vérifier que le test échoue.
 - Avancer étape par étape, tester chaque changement, et **demander à
   l'utilisateur** avant tout choix de comportement (voir §5).
-- Git : tout le travail se fait sur la branche **`finalisation-projet`**
-  (partie de `master`). Un commit par changement logique, message en
+- Git : tout le travail se fait sur la branche **`finalisation-projet`**,
+  fusionnée dans `master` à la fin de chaque session (le 26/10 : fusion
+  rapide, puis push des deux branches). Un commit par changement logique, message en
   français préfixé `test:`, `fix:`, `feat:` ou `docs:`. La mise à jour de ce
   fichier part dans le commit du changement qu'elle décrit.
 - Modèle principal : `qwen3:8b`. `mistral-nemo:12b` sert de comparaison, à
@@ -123,7 +126,12 @@ Machine de référence : RTX 5060 8 Go, Ollama 0.23.2, Python 3.12, `mcp` 1.30.0
 1. **3 ou 5 outils ?** Le sujet parle de « trois outils ». Recommandation :
    garder les 5 et présenter `read_file`, `list_files` et `write_file` comme le
    cœur.
-2. *(Mineur)* En cas de refus, les outils renvoient un texte `Erreur ...` avec
+2. **Lenteur de Qwen3** : il « réfléchit » avant chaque réponse, et le client
+   attend la réponse complète d'Ollama (`stream: False`), donc rien ne
+   s'affiche pendant 30 à 60 s. Options : passer `think: false` dans la
+   requête (plus rapide, peut-être moins fiable, à mesurer), ou afficher la
+   réponse en streaming. Rien n'est décidé.
+3. *(Mineur)* En cas de refus, les outils renvoient un texte `Erreur ...` avec
    `isError=false`, au lieu de lever une exception (`isError=true`). Les LLM le
    comprennent bien ; les tests acceptent les deux formes.
 
@@ -196,3 +204,20 @@ Machine de référence : RTX 5060 8 Go, Ollama 0.23.2, Python 3.12, `mcp` 1.30.0
     `../../etc/passwd` sans appeler le serveur : pour montrer le refus côté
     serveur, utiliser les tests ou MCP Inspector.
   - Avant ces changements : 5 appels dont 3 ratés pour une simple lecture.
+- Questions utilisées pour les mesures, à réutiliser au bloc C :
+  `Quels fichiers sont disponibles ?`, `Quelle installation a le plus
+  d'équipements ?`, `Lis ../../etc/passwd`, `qui es-tu ?`, puis `Écris un
+  résumé des installations sportives de Cachan dans resume.txt` avec `non`,
+  puis avec `OUI` (supprimer `sandbox/resume.txt` après chaque essai).
+- Limites à reporter dans le README :
+  - le contexte Ollama par défaut est de **4096 tokens** (colonne `CONTEXT`
+    de `ollama ps`). Au-delà, Ollama tronque le début de la conversation
+    **sans prévenir**. Ce n'est pas gênant tant que chaque question repart
+    de zéro, mais à surveiller si on lit de gros fichiers ;
+  - pas de mémoire entre les questions (décision ci-dessus).
+- Mistral n'a **pas** été re-testé avec le nouveau prompt système. D'après
+  `ollama show`, `mistral-nemo:12b` gère bien les outils (`tools`), mais il
+  pèse 7,1 Go pour 8 Go de mémoire vidéo : vérifier avec `ollama ps` qu'il
+  est à 100 % sur le GPU (bloc C).
+- Fin de session : branche poussée et fusionnée dans `master`. Prochaine
+  étape : §0.
