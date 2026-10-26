@@ -1,221 +1,153 @@
-# Omar Sy Valide — agent de code interactif avec validation humaine
+# Omar Sy Valide
+
+Un agent de code qui ne touche à rien sans ton accord. Tu lui écris une tâche, il te propose un plan, puis
+une modification. À chaque étape, tu réponds **Oui**, **Non** ou **Affiner**.
 
 ## Groupe
 
 | Membre | Contribution principale |
 |---|---|
-| Nassim Jazouli | À compléter au fil des phases |
-| Minh Nguyen | Mise en place du projet (phase S), à compléter au fil des phases |
+| Minh Nguyen | Socle du projet : configuration Claude Code, étude de Semantic Kernel, modèles de données et stockage SQLite, outils (worktree git, patch, sandbox), couche LLM OpenRouter et faux LLM de test, graphe et moteur d'exécution, CLI, scénarios de bout en bout, premier run réel, première version du tableau de bord. |
+| Nassim Jazouli | Agent interactif Omar (interface plein écran, lancement en une commande, alias) ; validation en deux temps (plan puis écriture) ; choix du fichier par l'IA et sélecteur `@fichier` ; écriture sans commit et `/undo` ; vérification adaptée au langage du fichier ; main rendue à l'humain quand les corrections échouent ; réponses en direct (streaming) ; `/resume` avec l'historique ; refonte du tableau de bord (vue d'ensemble, frise, français) ; sécurité de l'affichage. |
 
 ## Sujet
 
-- **Identifiant du catalogue :** B1 — Processus agentique avec validation humaine
-- **Problématique :** comment rendre un agent de code fiable et auditable ? Le graphe d'exécution est explicite
-  et déterministe (les transitions sont du code, jamais une décision de LLM), l'état est persisté à chaque étape,
-  et aucune modification n'atteint la branche principale sans validation humaine explicite.
-- **MVP :** un agent interactif plein écran (Textual), dans l'esprit d'OpenCode. On lui écrit une tâche, il
-  choisit le fichier à modifier et propose un plan, que l'humain valide (**Oui / Non / Affiner**). Il propose
-  ensuite un diff, validé de la même façon. Une fois le diff approuvé, le fichier est écrit dans un worktree
-  git isolé, où pytest et ruff le vérifient. Si les tests passent, le fichier est copié dans le dossier de
-  l'utilisateur, **sans commit** (`/undo` pour annuler). Journal d'exécution SQLite, traces OpenTelemetry,
-  coût suivi par run.
-
-La spécification complète est dans [docs/SPEC.md](docs/SPEC.md).
+- **Catalogue :** B1 — Processus agentique avec validation humaine.
+- **Problématique :** comment rendre un agent de code fiable et contrôlable ? Les étapes de l'agent suivent
+  un graphe fixe écrit en code (jamais décidé par l'IA), chaque étape est enregistrée, et rien n'est écrit
+  sans validation humaine.
+- **MVP :** un agent interactif dans le terminal. Il choisit le fichier à modifier, propose un plan, puis un
+  diff. Une fois le diff validé, il teste la modification et, si les tests passent, écrit le fichier dans ton
+  dossier (sans commit). Tout est journalisé : décisions, coût, temps.
 
 ## Architecture
 
-Graphe : `plan → plan_approval → code → write_approval → verify → finalize`. Il comporte deux portes
-humaines et trois boucles : affiner le plan (plan_approval → plan), affiner le diff (write_approval → code)
-et l'auto-correction (verify → code, dont la correction repasse par la validation de l'écriture). Après
-10 corrections automatiques sans succès, la main revient à l'humain avec l'erreur : affiner (10 nouveaux
-essais), abandonner, ou écrire quand même (issue `written_despite_failing_tests`). Toutes les autres issues
-mènent à une compensation (suppression du worktree).
-
-**Vérification selon le langage.** L'agent lance les outils du projet qui contient le fichier modifié :
-
-| Fichier | Tests | Lint |
-|---|---|---|
-| `.py` | `pytest` (avec le `.venv` du projet s'il en a un) | `ruff` |
-| dans un projet Node (`package.json` le plus proche) : `.ts`, `.tsx`, `.js`, `.css`… | `npm test` si le script existe | `npm run lint` si le script existe |
-| `.go` dans un module Go | `go test ./...` | `go vet ./...` |
-| `.rs` dans une crate | `cargo test` | — |
-| autre (`.md`…) | rien, et l'agent le dit | — |
-
-Le `node_modules` du projet est partagé avec la copie de test. Pour imposer d'autres commandes, ajoute un
-`.omar.toml` à la racine du projet :
-
-```toml
-[checks]
-cwd = "frontend"        # où lancer les commandes
-test = "npm test"       # "" pour désactiver
-lint = "npm run lint"
+```
+plan ─▶ [ toi : valider le plan ] ─▶ code ─▶ [ toi : valider le diff ] ─▶ tests ─▶ écriture
+          │ affiner                             │ affiner                  │ échec : correction
+          └─▶ nouveau plan                      └─▶ nouveau code           └─▶ nouveau code (repasse par toi)
 ```
 
-Un dépôt Python qui n'a aucun fichier de test passe (« aucun test ») ; un dépôt qui en avait et n'en collecte plus
-échoue. ruff applique la configuration du projet
-cible, mais seules les violations introduites par le changement comptent : l'IA n'est pas pénalisée pour du
-code qui existait avant. Détail dans [docs/SPEC.md](docs/SPEC.md) §5.
+- **Graphe** (`src/process/graph.py`) : une table de transitions, seule source du routage.
+- **Moteur** (`src/process/engine.py`) : exécute les étapes, enregistre l'état après chacune, s'arrête aux
+  validations humaines et reprend où il en était après un arrêt.
+- **IA** (`src/llm/`) : trois rôles appelés via OpenRouter et Semantic Kernel. Le *planner* fait le plan, le
+  *coder* écrit le code et le *summarizer* résume les erreurs de test. Les réponses sont du JSON validé.
+- **Vérification** (`src/tools/checks.py`) : les tests et le lint du projet, selon le langage du fichier
+  (pytest/ruff, npm, go, cargo). Ils sont lancés dans une copie isolée du dépôt (worktree git).
+- **Journal** (`src/storage/`) : base SQLite avec l'état des runs, les événements, les décisions et le coût.
+  Traces OpenTelemetry.
+- **Interfaces** : l'agent interactif (`src/tui/`, Textual), une CLI (`src/cli.py`) et un tableau de bord
+  (`src/dashboard.py`, Streamlit). Les trois pilotent le même moteur.
 
-**Pourquoi plus de Docker.** Docker servait à exécuter le code généré *avant* que l'humain l'ait vu. Le diff
-est désormais validé avant toute écriture ou exécution : aucun code non relu ne tourne. Les tests sont donc
-lancés en local, dans le worktree du run, avec un environnement sans secrets (pas de clé d'API) et une
-limite de temps. Ce sont ceux du dépôt cible, c'est-à-dire ce que l'utilisateur lancerait lui-même avec
-`pytest`. `SANDBOX_MODE=docker` reste disponible pour isoler aussi le réseau et le système de fichiers.
-
-Moteur : boucle asynchrone maison pilotée par la table de transitions. Le SK Process Framework a été évalué en
-phase 0 ([docs/phase0_sk_spike.md](docs/phase0_sk_spike.md)) : suspension et reprise possibles, mais sans
-point de sauvegarde par étape et avec des exceptions d'étape silencieusement absorbées. Semantic Kernel reste
-utilisé pour les services LLM et les filtres de traçage.
+Spécification complète : [docs/SPEC.md](docs/SPEC.md).
 
 ## Installation
 
-Prérequis : Python 3.11+ et git. Docker et Node.js (pour pyright) sont optionnels.
+Prérequis : Python 3.11+ et git.
 
 ```bash
 cd groupe-Omar_Sy-Valide
 python -m venv .venv
-.venv/bin/pip install -e ".[dev]"   # Windows : .venv\Scripts\pip ; versions figées dans pyproject.toml
-cp .env.example .env                # puis renseigner la clé et les modèles ; ne jamais commiter .env
+.venv/bin/pip install -e ".[dev]"     # Windows : .venv\Scripts\pip install -e ".[dev]"
+cp .env.example .env
 ```
 
-Le `.env` est lu depuis ce dossier, quel que soit le dépôt où l'agent est lancé. Ses valeurs vides reprennent
-les valeurs par défaut de `src/config.py`.
+Puis remplis `.env` (ne le commite jamais) :
 
-### Hook de commit (chaque membre, une fois)
+```
+OPENROUTER_API_KEY=ta-clé
+PLANNER_MODEL=qwen/qwen3.8-flash
+CODER_MODEL=deepseek/deepseek-v4.1-flash
+SUMMARIZER_MODEL=z-ai/glm-5.3-flash
+```
 
-Depuis la racine du dépôt :
+### L'alias `omar` (une seule fois)
+
+Pour lancer l'agent depuis n'importe quel projet en tapant simplement `omar`, ajoute cette ligne à la fin de
+`~/.bashrc` (ou `~/.zshrc`) en adaptant le chemin :
 
 ```bash
-git config core.hooksPath groupe-Omar_Sy-Valide/.githooks
+alias omar="python3 $HOME/chemin/vers/2026-MSMIN5IN52-GenAI/groupe-Omar_Sy-Valide/omar.py"
 ```
 
-Le hook refuse un commit sans trailer `Co-authored-by:` pour le coéquipier, ou avec un trailer Claude/Anthropic.
-
-### Claude Code (chaque membre, une fois)
-
-Claude Code est lancé depuis la **racine du dépôt**. Le `.gitignore` du dépôt de cours ignore `.claude/` à la
-racine : la configuration partagée est donc versionnée ici, dans `.claude/settings.json`, et chaque membre la
-copie à la racine.
+Puis recharge ton terminal :
 
 ```bash
-# depuis la racine du dépôt
-mkdir -p .claude && cp groupe-Omar_Sy-Valide/.claude/settings.json .claude/settings.json
-npm install -g pyright
-claude plugin install superpowers@claude-plugins-official --scope project
-claude plugin install pyright-lsp@claude-plugins-official --scope project
-claude plugin install context7@claude-plugins-official --scope project
-claude plugin install security-guidance@claude-plugins-official --scope project
-claude plugin install code-review@claude-plugins-official --scope project
-claude plugin install commit-commands@claude-plugins-official --scope project
+source ~/.bashrc
 ```
 
-Puis `/reload-plugins` dans Claude Code (ou redémarrage).
+Le venv n'a pas besoin d'être activé : `omar.py` le retrouve tout seul.
 
-## Lancer Omar Sy Valide
+## Utilisation
+
+Le projet à modifier doit être un dépôt git.
 
 ```bash
-python omar.py ../../demo-calc          # le dépôt à modifier (défaut : dossier courant)
+cd ~/mon-projet
+omar                      # ou : omar ~/mon-projet
 ```
 
-Le venv n'a pas besoin d'être activé : `omar.py` se relance de lui-même avec `.venv/`. Une fois le projet
-installé, la commande `omar` fait la même chose depuis n'importe quel dépôt.
+Dans l'agent :
 
-Dans l'interface :
-- écris une tâche, par exemple « corrige add() et mean() pour que les tests passent », puis Entrée ;
-- à chaque validation, **o** = Oui, **n** = Non, **a** = Affiner (tu écris ce qu'il faut changer, Entrée) ;
-- **@ pour citer un fichier** : une liste filtrée des fichiers du dépôt s'ouvre au-dessus de la saisie
-  (↑/↓ pour choisir, Entrée ou Tab pour insérer, Échap pour fermer). Le premier fichier cité devient le
-  fichier à modifier ; sans @, l'IA le choisit.
-- `/resume` reprend le dernier run du dépôt (ou `/resume <id>` un run précis) et réaffiche toute sa
-  conversation : ta tâche, chaque plan et chaque diff proposés, tes réponses, les tests, l'issue ;, `/runs`, `/undo`,
-  `/repo <chemin>`, `/clear`, `/help`, `/quit` (ou Ctrl+Q).
+| Action | Comment |
+|---|---|
+| Donner une tâche | Écris-la puis **Entrée**, par ex. « corrige add() pour que les tests passent ». |
+| Imposer le fichier | Tape **@** : une liste des fichiers s'ouvre (↑/↓, Entrée ou Tab pour choisir). Sans @, l'IA choisit. |
+| Répondre | **o** = Oui, **n** = Non, **a** = Affiner (tu écris ce qu'il faut changer). |
+| Annuler la dernière écriture | `/undo` |
+| Reprendre le dernier run | `/resume` (réaffiche toute la conversation) |
+| Autres commandes | `/runs`, `/repo <chemin>`, `/clear`, `/help`, `/quit` (ou Ctrl+Q) |
 
-Les réponses du modèle s'affichent **en direct** pendant leur génération (plan, code, résumé d'erreur, et le
-raisonnement des modèles qui en produisent), puis laissent la place au résultat validé.
+Les réponses de l'IA s'affichent en direct pendant leur génération. La colonne de droite montre l'étape en
+cours et le coût du run.
 
-La colonne de droite suit le graphe en direct : étape courante, étapes passées, boucles, compteurs et coût.
-Chaque décision est enregistrée avec ton login comme évaluateur. L'affichage se remet en page quand on
-redimensionne le terminal ; les journaux des bibliothèques vont dans `omar.log` et pas à l'écran.
+Si les tests échouent encore après 10 corrections automatiques, l'agent te rend la main : tu peux affiner,
+abandonner, ou écrire le fichier quand même.
 
-**Sécurité de l'affichage.** Le diff est le seul garde-fou avant l'exécution du code. Une réponse du modèle
-qui contient des caractères de contrôle (par exemple `ESC[2K`, qui efface une ligne à l'écran et pourrait
-cacher du code au relecteur) est donc refusée comme sortie invalide. Tout texte venant du modèle ou du dépôt
-est affiché avec ces caractères rendus visibles (`\x1b`), jamais envoyés au terminal.
+Pour imposer les commandes de test d'un projet, ajoute un `.omar.toml` à sa racine :
 
-## CLI (mêmes runs, une commande à la fois)
-
-Depuis `groupe-Omar_Sy-Valide/` :
-
-```bash
-python -m src.cli start --repo ../chemin/depot --prompt "Corrige add()" --scenario demo   # --file pour imposer le fichier
-python -m src.cli status <run_id>        # plan, diff, vérification, compteurs, coût
-python -m src.cli decide <run_id> --action approve --actor alice   # porte en attente : plan ou écriture
-python -m src.cli decide <run_id> --action revise --actor alice --comment "Garde les annotations"
-python -m src.cli decide <run_id> --action reject --actor alice
-python -m src.cli decide <run_id> --action write_anyway --actor alice   # seulement après 10 corrections ratées
-python -m src.cli undo <run_id>          # restaure le fichier écrit par un run terminé
-python -m src.cli resume <run_id>        # reprise après un crash ou une erreur fournisseur
-python -m src.cli sweep                  # expire les approbations dépassées
-python -m src.cli runs                   # liste des runs
-python -m src.cli report                 # rapport d'évaluation (JSON)
-python -m src.cli credits                # consommation de la clé OpenRouter (la clé n'est jamais affichée)
+```toml
+[checks]
+cwd = "frontend"
+test = "npm test"
+lint = "npm run lint"
 ```
-
-`--mock-llm --mock-script script.json` remplace OpenRouter par le faux LLM scripté (aucun appel réseau) ;
-`--trace` affiche les spans OpenTelemetry (export OTLP si `OTEL_EXPORTER_OTLP_ENDPOINT` est défini).
 
 ### Tableau de bord
 
 ```bash
-streamlit run src/dashboard.py     # http://127.0.0.1:8501
+streamlit run src/dashboard.py        # puis http://127.0.0.1:8501
 ```
 
-- **Vue d'ensemble** (page d'accueil) : coût total et part du budget, nombre de runs, fichiers écrits,
-  décisions en attente, taux de réussite, temps machine et attente humaine ; runs par statut et coût par
-  projet ; la liste de ce qui a été fait (fichiers écrits) et de tous les runs.
-- **Runs reconnaissables** : « cuisine_rag · début de la tâche » au lieu d'un identifiant ; la date et le
-  statut sont dans le détail, et on filtre par projet et par statut.
-- **Un run en un coup d'œil** : la tâche en titre, le statut expliqué en une phrase (ce qui s'est passé, et
-  si ton dossier a été modifié), puis le coût, le temps machine et l'attente humaine.
-- **Déroulé** : une frise lisible (tâche reçue, plan proposé, ta décision, code proposé, tests, fichier
-  écrit…), avec le plan, le diff ou la sortie des tests dépliables.
-- **Décider** : sur un run en attente, les mêmes réponses que dans l'agent (Oui, Non, Affiner, et
-  « Écrire quand même » après 10 corrections ratées). Ton login est prérempli.
-- Les onglets « Graphe » (tracé depuis la table de transitions) et « Données brutes » (journal, décisions,
-  mesures, identifiant) gardent la vue technique. Chaque rafraîchissement expire les validations dépassées.
+La page d'accueil résume tous les runs : coût total, fichiers écrits, taux de réussite, temps passé. Choisis
+un run à gauche pour voir son déroulé et, s'il attend une décision, y répondre.
 
-Modèles utilisés pour le run réel (à renseigner dans `.env`, autorisés par la clé du cours) :
-`PLANNER_MODEL=qwen/qwen3.8-flash`, `CODER_MODEL=deepseek/deepseek-v4.1-flash`,
-`SUMMARIZER_MODEL=z-ai/glm-5.3-flash`.
+### CLI
+
+Les mêmes runs, une commande à la fois (pratique pour les scripts) :
+
+```bash
+python -m src.cli start --repo ~/mon-projet --prompt "Corrige add()"
+python -m src.cli decide <run_id> --action approve --actor nassim
+python -m src.cli --help
+```
 
 ## Tests
 
 ```bash
 pytest
 ruff check src tests
-pyright src      # mode strict
+pyright src
 ```
 
-212 tests, tous sans réseau ni attente réelle (faux LLM scripté, `FakeClock`) :
+Les tests n'appellent jamais OpenRouter : ils utilisent un faux LLM scripté et une horloge simulée. Ils
+couvrent le graphe (chaque transition), les scénarios de bout en bout (validation, refus, expiration, reprise
+après crash, affinage, corrections automatiques, conflit d'écriture, budget), la vérification par langage,
+le streaming, l'agent interactif piloté sans écran et le tableau de bord.
 
-- **Scénarios de bout en bout** (`tests/test_scenarios.py`, SPEC §8) : nominal (fichier choisi par l'IA),
-  rejet à chaque porte, expiration, reprise en attente de validation, crash au milieu d'une étape (réponse
-  LLM rejouée depuis le cache), affinage du plan puis du diff, auto-correction, conflit d'écriture, plafond
-  de budget.
-- **Agent interactif** (`tests/test_tui.py`) : l'interface Textual pilotée sans écran (`Pilot`). Tâche,
-  plan, Oui, diff, Oui, fichier écrit sans commit ; Affiner ; Non ; `/undo` ; `/runs` ; `/resume` ; refus
-  du dépôt de l'agent lui-même.
-- **Table de transitions** : chaque route de la spec, gardes exhaustives et exclusives, atteignabilité.
-- **Moteur, CLI, couche LLM, outils, stockage, télémétrie** : y compris la requête OpenRouter vérifiée via un
-  transport HTTP simulé, et la sandbox Docker réelle (réseau coupé, montage en lecture seule).
-- **Tableau de bord** : graphe et règles d'affichage testés comme fonctions pures, puis la page Streamlit
-  elle-même pilotée sans navigateur (`AppTest`) : sélection d'un run, clic sur « Approuver », vérification
-  du merge.
-- Un test par mutation a vérifié que le scénario 5 échoue si le cache LLM est désactivé.
-
-Les tests Docker sont ignorés si l'image `mini-opencode-sandbox` n'est pas construite. Avec un Docker
-installé via snap, ils échouent (déjà le cas avant ce changement) : le confinement snap ne voit pas le `/tmp`
-de l'hôte, où pytest crée ses dépôts de test.
+Résultat actuel : 212 tests, 208 passent. Les 4 tests Docker (optionnels) échouent sur une machine où
+Docker est installé via snap, qui ne voit pas le dossier `/tmp` de l'hôte.
 
 ## Résultats et évaluation
 
@@ -224,48 +156,42 @@ Run réel sur un dépôt de démonstration (`calc.py` avec deux bugs), détaill�
 
 | Mesure | Valeur |
 |---|---|
-| Complétion | 1 / 1 (COMPLETED après 1 auto-correction et 1 révision humaine) |
-| Temps de calcul moyen (P95) | plan 8,9 s (11,7 s), code 2,0 s (3,0 s), vérification 1,3 s (1,9 s) |
-| Attente humaine moyenne | 103 s, comptée à part du temps de calcul |
-| Coût | 0,000829 USD, soit 0,00076 EUR (0,008 % du budget de 10 EUR) |
+| Complétion | 1 / 1, après 1 correction automatique et 1 affinage humain |
+| Temps de calcul moyen | plan 8,9 s, code 2,0 s, vérification 1,3 s |
+| Attente humaine moyenne | 103 s, mesurée à part |
+| Coût | 0,00076 € (0,008 % du budget de 10 €) |
 
-Ce run a révélé deux défauts corrigés dans la phase 4 : un faux positif du linter dans la sandbox Docker
-(règle EXE002 déclenchée par les permissions du montage Windows, que le modèle « corrigeait » en ajoutant un
-shebang) et des erreurs fournisseur affichées sous forme de trace complète. Un seul run réel ne constitue pas
-une mesure statistique : les chiffres de taux de complétion sont à compléter par d'autres runs.
+Les runs suivants sont visibles dans le tableau de bord, avec leur statut, leur coût et leur déroulé. Un
+seul run détaillé ne fait pas une mesure statistique : le taux de réussite est à confirmer sur plus de runs.
 
 ## Limites et plan B
 
-- **Un seul fichier cible par run**, choisi par l'IA (ou imposé avec `--file` en CLI).
-- **Pas de commit** : le fichier est écrit dans le dossier de travail, et le commit reste à la main de
-  l'utilisateur. Si le fichier est modifié pendant le run, rien n'est écrasé (`write_failed`).
-- **`MAX_FIX` (10 par défaut)** est remis à zéro quand l'humain affine le diff. `MAX_REVISIONS` (5 par
-  défaut) est partagé par les deux portes. Une valeur dans `.env` remplace ces défauts.
-- **Modèles limités par la clé du cours** (8 modèles autorisés) ; un modèle refusé laisse le run reprenable.
-- **Exécution locale par défaut** : seul du code relu et approuvé tourne, mais sans isolation réseau ni
-  disque. `SANDBOX_MODE=docker` ajoute cette isolation.
-- **Tableau de bord sans authentification** : outil local mono-utilisateur. `.streamlit/config.toml` le limite
-  à `127.0.0.1` ; le nom de l'évaluateur est déclaratif. Il ne doit pas être exposé sur un réseau sans un
-  proxy authentifiant devant lui. Les textes issus du LLM et des outils sont affichés échappés (pas de
-  Markdown actif, donc pas d'image ni de lien injectés).
-- **Faux LLM réservé aux tests** : `pytest` n'appelle jamais OpenRouter. L'agent interactif utilise
-  toujours les vrais modèles du `.env`.
+- Un seul fichier modifié par tâche.
+- Pas de commit : le fichier est écrit dans ton dossier, tu commites toi-même (`/undo` pour annuler).
+- Les tests tournent sur ta machine, sans isolation réseau. `SANDBOX_MODE=docker` dans `.env` les isole.
+- Seuls les modèles autorisés par la clé du cours sont utilisables.
+- Le tableau de bord n'a pas de connexion : il n'écoute que sur `127.0.0.1`.
+- Coût : quelques centimes par tâche, plafonné par `MAX_COST_EUR_PER_RUN` (0,50 € par défaut).
+- Plan B de démonstration : la CLI avec `--mock-llm --mock-script <fichier.json>` rejoue des réponses
+  scriptées sans réseau.
 
 ## Répartition du travail
 
-Une branche par phase, fusionnée par Pull Request relue par l'autre membre. Chaque commit porte un trailer
-`Co-authored-by:` pour le coéquipier. À compléter au fil des phases.
+Le travail a été découpé en branches, une par phase ou par fonctionnalité, chacune fusionnée par Pull Request
+et relue par l'autre membre. Minh a construit le socle (phases S à 5) ; Nassim en a fait l'agent interactif
+et a refondu le tableau de bord (voir le tableau du début). Chaque commit porte un trailer `Co-authored-by`
+pour le coéquipier.
 
 ## Utilisation d'agents IA
 
-Ce projet est développé avec l'assistance de **Claude Code (Anthropic)**, utilisé comme agent de code pour la
-mise en place du projet, la rédaction de code, de tests et de documentation. Les commits ne portent pas de
-trailer Claude (choix de l'équipe, imposé par le hook de commit) : cette section tient lieu de déclaration de
-la contribution de l'agent, conformément à `AGENTS.md`. Tout code produit par l'agent est relu par l'équipe
-avant commit.
+Ce projet a été développé avec **Claude Code (Anthropic)** comme agent de code : code, tests et
+documentation. Les commits ne portent pas de trailer Claude (règle de l'équipe, appliquée par le hook
+`.githooks/commit-msg`) : cette section déclare donc la contribution de l'agent, conformément à `AGENTS.md`.
+Tout ce qu'il a produit a été relu par l'équipe avant d'être commité.
 
 ## Licence et références
 
-- Code : licence du dépôt (voir `LICENSE` à la racine).
-- Références : [Semantic Kernel — Process Framework](https://learn.microsoft.com/en-us/semantic-kernel/frameworks/process/process-framework),
-  [OpenRouter](https://openrouter.ai/docs), [OpenTelemetry](https://opentelemetry.io/docs/), OpenCode (inspiration).
+- Code : licence du dépôt (`LICENSE` à la racine).
+- [Semantic Kernel](https://learn.microsoft.com/en-us/semantic-kernel/), [OpenRouter](https://openrouter.ai/docs),
+  [Textual](https://textual.textualize.io/), [Streamlit](https://docs.streamlit.io/),
+  [OpenTelemetry](https://opentelemetry.io/docs/). Inspiration : OpenCode et Claude Code.
