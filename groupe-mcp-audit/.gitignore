@@ -1,0 +1,35 @@
+# Secrets (repris du modèle template-groupe du cours)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Artefacts et fichiers lourds
+dist/
+build/
+coverage/
+outputs/
+models/
+*.log
+*.tmp
+*.zip
+*.safetensors
+*.gguf
+*.onnx
+
+# Créés par le serveur à l'exécution
+sandbox/.mcp_audit.jsonl
+sandbox/.mcp-tmp-*

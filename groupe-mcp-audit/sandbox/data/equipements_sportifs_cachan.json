@@ -1,0 +1,46 @@
+{
+  "dataset": "Équipements sportifs à Cachan (échantillon)",
+  "source_dataset": "Data ES — Recensement des équipements sportifs et lieux de pratique",
+  "producer": "Ministère chargé des Sports",
+  "prepared_date": "2026-10-25",
+  "license": "Licence Ouverte / Open Licence 2.0",
+  "attribution": "Source : Ministère chargé des Sports, Data ES. Extrait sélectionné et reformatté pour ce projet.",
+  "municipality": {
+    "name": "Cachan",
+    "postal_code": "94230",
+    "insee_code": "94016"
+  },
+  "installations": [
+    {
+      "installation_id": "I940160010",
+      "name": "Complexe sportif Léo Lagrange",
+      "address": "25 avenue de l'Europe",
+      "equipment_count_in_source": 17,
+      "example_equipment": [
+        "Terrain de football honneur",
+        "Stade d'athlétisme",
+        "Salle d'escrime"
+      ]
+    },
+    {
+      "installation_id": "I940160016",
+      "name": "Stade Dumotel",
+      "address": "21 avenue Louis-Georgeon",
+      "equipment_count_in_source": 1,
+      "example_equipment": [
+        "Terrain de football"
+      ]
+    },
+    {
+      "installation_id": "I940160009",
+      "name": "Ancien site de l'École normale supérieure de Cachan",
+      "address": "61 avenue du Président Wilson",
+      "equipment_count_in_source": 10,
+      "example_equipment": [
+        "Le grand gymnase",
+        "Dojo",
+        "Terrain de football"
+      ]
+    }
+  ]
+}
