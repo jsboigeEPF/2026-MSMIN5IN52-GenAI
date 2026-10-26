@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import signal
 import sys
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,12 @@ from urllib.request import Request, urlopen
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.shared.exceptions import McpError
+
+try:
+    import readline  # noqa: F401  (arrow keys and history for input(); absent on Windows)
+except ImportError:
+    pass
 
 PROJECT_DIR = Path(__file__).resolve().parent
 MUTATING_TOOLS = {"write_file", "create_directory", "move_file"}
@@ -161,9 +168,9 @@ async def run_chat(session: ClientSession, model: str, ollama_url: str, mcp_tool
             {"role": "user", "content": prompt},
         ]
         for _ in range(MAX_TOOL_ROUNDS):
-            assistant_message = await asyncio.to_thread(
-                ollama_chat, ollama_url, model, messages, ollama_tools
-            )
+            # Called directly, not in a thread: Ctrl+C then interrupts the request at once.
+            # Nothing else needs the event loop while the model is answering.
+            assistant_message = ollama_chat(ollama_url, model, messages, ollama_tools)
             messages.append(assistant_message)
             tool_calls = assistant_message.get("tool_calls") or []
             if not tool_calls:
@@ -208,7 +215,17 @@ async def run_chat(session: ClientSession, model: str, ollama_url: str, mcp_tool
             print(f"Le modèle a atteint la limite de {MAX_TOOL_ROUNDS} appels d'outils pour cette demande.\n")
 
 
+def root_error(exc: BaseException) -> BaseException:
+    """The MCP session (anyio) wraps errors in exception groups; return the underlying one."""
+    while getattr(exc, "exceptions", None) and len(exc.exceptions) == 1:
+        exc = exc.exceptions[0]
+    return exc
+
+
 async def main() -> None:
+    # asyncio.run() replaces the Ctrl+C handler with one that waits for the next await,
+    # so input() would ignore Ctrl+C. Restore the default: raise KeyboardInterrupt now.
+    signal.signal(signal.SIGINT, signal.default_int_handler)
     parser = argparse.ArgumentParser(description="Client de démonstration MCP avec Ollama local.")
     parser.add_argument("--model", default="qwen3:4b", help="Modèle Ollama (défaut : qwen3:4b).")
     parser.add_argument(
@@ -230,10 +247,18 @@ async def main() -> None:
                 listed = await session.list_tools()
                 print("Outils MCP découverts :", ", ".join(tool.name for tool in listed.tools))
                 await run_chat(session, args.model, args.ollama_url, listed.tools)
-    except (OSError, RuntimeError) as exc:
-        print(f"Erreur de démarrage/transport : {exc}", file=sys.stderr)
-        raise SystemExit(1) from exc
+    except Exception as exc:
+        error = root_error(exc)
+        if isinstance(error, McpError):
+            error = f"le serveur MCP s'est arrêté ou n'a pas pu démarrer ({error})."
+        print(f"Erreur de démarrage/transport : {error}", file=sys.stderr)
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except BaseException as exc:
+        if not isinstance(root_error(exc), KeyboardInterrupt):
+            raise
+        print("\nFin du client.")
