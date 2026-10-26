@@ -28,6 +28,7 @@ class ConversationSession:
         self.interruptions = Interruptions(deps, cfg, self.resp, self.history, self.tasks, self.sm, self.capture)
         self.runner = TurnRunner(deps, cfg, self.resp, self.history, self.tasks, self.sm)
         self.text_only = False                    # bascule automatique : le STT ne répond plus, on n'écoute plus le micro
+        self.muted = False                        # micro coupé par l'utilisateur : aucune parole captée, donc aucune interruption
         self._stt_fails = 0
         deps.vad.reset()
 
@@ -37,7 +38,7 @@ class ConversationSession:
 
     # ---------- entrées ----------
     async def on_mic(self, data: bytes) -> None:
-        if self.text_only:
+        if self.text_only or self.muted:
             return
         for sig in self.capture.frames(data):
             if sig.kind == "barge_in":
@@ -51,6 +52,15 @@ class ConversationSession:
                     self.deps.rec("vad_speech_end", speech_ms=sig.event.speech_ms)
                     self._start_turn(audio=(sig.event.pcm, MIC_RATE), speech_ms=sig.event.speech_ms)
                     return
+
+    async def on_mute(self, muted: bool) -> None:
+        """Coupe ou rétablit l'écoute (ex. endroit bruyant). À la coupure, l'énoncé en cours est abandonné : il ne finirait jamais."""
+        if muted == self.muted:
+            return
+        self.muted = muted
+        self.deps.rec("mic_muted" if muted else "mic_unmuted")
+        self.capture.reset()
+        await self.deps.send_json({"type": "vad", "speaking": False})
 
     async def on_voice_retry(self) -> None:
         """Le client demande de réessayer la voix après une bascule automatique en mode texte."""

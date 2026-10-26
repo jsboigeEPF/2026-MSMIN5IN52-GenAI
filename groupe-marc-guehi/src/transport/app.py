@@ -124,6 +124,8 @@ async def ws_endpoint(ws: WebSocket) -> None:
                 data = json.loads(msg["text"])
                 if data.get("type") == "text":
                     await session.on_text(data.get("text", ""))
+                elif data.get("type") == "mute":
+                    await session.on_mute(bool(data.get("muted")))
                 elif data.get("type") == "voice_retry":
                     await session.on_voice_retry()
                 elif data.get("type") == "playback_ended":

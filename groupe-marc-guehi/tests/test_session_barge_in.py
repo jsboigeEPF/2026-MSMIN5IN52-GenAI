@@ -201,3 +201,15 @@ async def test_barge_in_goes_through_barge_in_state_and_is_traced():
     assert changes[-2:] == [("speaking", "barge_in"), ("barge_in", "listening")]
     states = [m["state"] for m in sent if isinstance(m, dict) and m["type"] == "state"]
     assert "barge_in" not in states and states[-1] == "listening"
+
+
+async def test_muted_mic_never_interrupts_and_resumes_after_unmute():
+    s, vad, sent = make()
+    await user_speaks_a_turn(s, vad)
+    await until(lambda: s.state == SPEAKING)
+    await s.on_mute(True)
+    await feed(s, vad, 0.95, 30)                     # bruit fort ambiant : ignoré
+    assert not any(isinstance(m, dict) and m["type"] == "interrupt" for m in sent)
+    await s.on_mute(False)
+    await feed(s, vad, 0.95, 14)                     # micro rétabli : l'interruption fonctionne
+    assert any(isinstance(m, dict) and m["type"] == "interrupt" for m in sent)
