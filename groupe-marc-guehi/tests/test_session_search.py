@@ -214,3 +214,13 @@ async def test_tts_outage_keeps_text_and_tells_the_client():
     await s.on_text("Bonjour")
     await until(lambda: "audio_end" in types(sent))
     assert "tts_down" in types(sent) and agent_chunks(sent) and s.state == LISTENING
+
+
+async def test_waiting_phrases_are_sent_to_the_client_exactly_once():
+    s, _, sent = make(search_fillers=bank(), wait_fillers=bank("Encore un instant.", 0.2), search_wait_after_s=0.2)
+    s.deps.llm = SlowSearchLLM()
+    await s.on_text("Quelle est la météo à Lyon ?")
+    await until(lambda: "audio_end" in types(sent))
+    chunks = agent_chunks(sent)
+    assert chunks[:2] == ["Je regarde la météo à Lyon.", "Encore un instant."]
+    assert len(chunks) == len(set(chunks))   # une accroche ne doit jamais repartir avec la réponse (sous-titres dupliqués)

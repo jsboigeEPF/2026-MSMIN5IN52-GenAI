@@ -49,11 +49,21 @@ class TurnRunner:
             on_user_recorded()
             await d.send_json({"type": "transcript", "role": "user", "text": text})
 
+        shown = 0  # rang du prochain morceau à envoyer au client (les phrases d'attente partent seules, avec leur audio)
+
+        async def show_upto(rank: int) -> None:
+            """Envoie le texte des morceaux jusqu'au rang `rank` : il part avec l'audio, pas avant (affichage au rythme de la voix)."""
+            nonlocal shown
+            shown = max(shown, resp.off)  # `off` grandit pendant une recherche : sauter les phrases d'attente déjà envoyées
+            while shown <= rank and shown < len(resp.texts):
+                shown += 1
+                await d.send_json({"type": "agent_chunk", "text": resp.texts[shown - 1]})
+
         async def on_chunk(text: str) -> None:
             resp.add_chunk(text)
-            await d.send_json({"type": "agent_chunk", "text": text})
 
         async def on_audio(pcm: bytes, idx: int) -> None:
+            await show_upto(idx + resp.off)
             resp.durs[idx + resp.off] += duration_s(pcm, SAMPLE_RATE_OUT)
             if resp.first_content_s is None:
                 await asyncio.gather(*waiting.announces, return_exceptions=True)  # l'annonce de recherche finit d'abord
@@ -79,6 +89,7 @@ class TurnRunner:
             return TurnOutcome(error=True, stt_failed=audio is not None and not resp.user_recorded)
         await asyncio.gather(*waiting.announces, return_exceptions=True)
         self.tasks.cancel_aux()  # la phrase « encore un instant » ne doit plus partir une fois la réponse donnée
+        await show_upto(len(resp.texts))  # morceaux sans audio (voix en panne) : le texte reste affiché
         if r.tts_failed:
             await d.send_json({"type": "tts_down"})
         resp.turn_complete = True

@@ -74,7 +74,7 @@ Même orchestrateur, source `TXT` à la place de VAD+STT ; sortie texte (et TTS 
 Une source `AudioFile` horodatée remplace le micro (même interface) ; permet tests, bruit contrôlé et plan B.
 
 ## Protocole WebSocket du prototype (`/ws`)
-Client → serveur : binaire = PCM16 16 kHz mono (trames de 512 échantillons) ; JSON `{"type":"text","text":…}` (mode texte), `{"type":"playback_ended"}`, `{"type":"interrupted","played_s":…}`, `{"type":"voice_retry"}`.
+Client → serveur : binaire = PCM16 16 kHz mono (trames de 512 échantillons) ; JSON `{"type":"text","text":…}` (mode texte), `{"type":"playback_ended"}`, `{"type":"interrupted","played_s":…}`, `{"type":"voice_retry"}`, `{"type":"mute","muted":bool}` (micro coupé : trames non envoyées, serveur sourd, énoncé en cours abandonné ; le texte reste possible).
 Serveur → client : binaire = PCM16 24 kHz mono ; JSON `ready` (voix), `state` (listening/thinking/speaking), `vad`, `transcript`, `agent_chunk`, `searching`, `metrics`, `audio_end`, `interrupt`, `truncate`, `fallback` (`mode`: text/voice), `tts_down`, `error`.
 
 ## Structure cible

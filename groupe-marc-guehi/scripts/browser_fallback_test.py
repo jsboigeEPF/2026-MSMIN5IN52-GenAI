@@ -50,6 +50,7 @@ def main() -> None:
         page.click("#toggle")
         result: dict = {}
         page.wait_for_function('document.body.dataset.fallback === "1"', timeout=a.timeout * 1000)
+        result["vue_ecrit_auto"] = page.evaluate("document.body.dataset.view") == "text"
         result["bandeau_visible"] = page.is_visible("#banner")
         result["champ_texte_actif"] = page.is_enabled("#text")
         frames_at_switch = page.evaluate("window.__stats.framesSent")

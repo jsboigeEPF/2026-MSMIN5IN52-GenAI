@@ -35,6 +35,7 @@ def main() -> None:
         page.click("#toggle")
         if a.text:
             page.wait_for_function("document.body.dataset.state === 'listening'")
+            page.click("#viewText")  # le champ texte n'existe que dans la vue Écrit
             page.fill("#text", a.text)
             page.click("#send")
         try:
@@ -43,10 +44,13 @@ def main() -> None:
         except Exception as e:  # noqa: BLE001
             print("TIMEOUT :", type(e).__name__)
         stats = page.evaluate("window.__stats")
+        stats["vue"] = page.evaluate("document.body.dataset.view")
+        stats["sous_titres"] = page.evaluate("document.getElementById('subs').textContent")
         Path(a.screenshot).parent.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=a.screenshot)
         browser.close()
     print(json.dumps({k: stats[k] for k in ("framesSent", "audioBytes", "chunksPlayed", "transcripts", "errors", "interrupts", "truncates")}, ensure_ascii=False, indent=1))
+    print("vue :", stats["vue"], "| sous-titres :", stats["sous_titres"])
     print("états :", " > ".join(dict.fromkeys(stats["states"])))
     for m in stats["metrics"]:
         print("métriques :", {k: (round(v) if isinstance(v, float) else v) for k, v in m.items() if k != "type"})
