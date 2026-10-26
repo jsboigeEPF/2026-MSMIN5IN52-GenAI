@@ -2,13 +2,23 @@
 from __future__ import annotations
 
 import asyncio
-import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 
-from src.interfaces import LLM, STT, TTS, SearchNotice
+from src.interfaces import LLM, STT, TTS, LengthCut, SearchNotice
+from src.metrics.clock import elapsed_ms, now_ns
 from src.metrics.recorder import Recorder
 from src.orchestrator.chunker import SentenceChunker
+from src.orchestrator.history import append_assistant, append_user
+from src.stt.noise import noise_reason
+
+
+class IgnoredTranscript(Exception):
+    """La transcription est vide, du bruit ou une hallucination connue : aucun tour LLM, retour à l'écoute."""
+
+    def __init__(self, reason: str, text: str) -> None:
+        super().__init__(reason)
+        self.reason, self.text = reason, text
 
 
 @dataclass
@@ -29,11 +39,12 @@ async def run_turn(*, stt: STT, llm: LLM, tts: TTS, history: list[dict], system_
                    on_chunk: Callable[[str], Awaitable[None]] | None = None,
                    on_audio: Callable[[bytes, int], Awaitable[None]] | None = None,
                    on_search: Callable[[str, str], Awaitable[None]] | None = None,
-                   stt_task: asyncio.Task[str] | None = None) -> TurnResult:
+                   stt_task: asyncio.Task[str] | None = None, ignore_phrases: Sequence[str] = ()) -> TurnResult:
     """on_chunk(texte) : un morceau part vers le TTS ; on_audio(pcm, idx) : audio prêt, dans l'ordre de lecture (idx = rang du morceau) ;
     on_search(requête, annonce) : le LLM cherche sur internet (avant tout morceau de réponse) ; annonce = phrase à dire pendant la recherche ;
-    stt_task : transcription déjà lancée sur ce même audio (STT spéculatif) ; repli sur un appel normal si elle a échoué."""
-    t0 = time.perf_counter()
+    stt_task : transcription déjà lancée sur ce même audio (STT spéculatif) ; repli sur un appel normal si elle a échoué ;
+    ignore_phrases : hallucinations à ignorer (avec le vide et le bruit) : `IgnoredTranscript` est levée avant tout appel au LLM."""
+    t0 = now_ns()
     stt_ms = None
     if user_text is None:
         if audio is None:
@@ -46,10 +57,12 @@ async def run_turn(*, stt: STT, llm: LLM, tts: TTS, history: list[dict], system_
             if stt_task is None:
                 raise
             user_text = await stt.transcribe(*audio)
-        stt_ms = (time.perf_counter() - t0) * 1000
+        stt_ms = elapsed_ms(t0)
+        if reason := noise_reason(user_text, ignore_phrases):
+            raise IgnoredTranscript(reason, user_text)
     if on_user_text:
         await on_user_text(user_text)
-    history.append({"role": "user", "content": user_text})
+    append_user(history, user_text)
 
     first_audio: list[float] = []
     tts_errors: list[str] = []
@@ -60,7 +73,7 @@ async def run_turn(*, stt: STT, llm: LLM, tts: TTS, history: list[dict], system_
         try:
             async for pcm in tts.stream(text):
                 if is_first and not first_audio:
-                    first_audio.append((time.perf_counter() - t0) * 1000)
+                    first_audio.append(elapsed_ms(t0))
                     rec("turn_first_audio", ms=round(first_audio[0], 1))
                 parts.append(pcm)
                 q.put_nowait(pcm)
@@ -81,7 +94,7 @@ async def run_turn(*, stt: STT, llm: LLM, tts: TTS, history: list[dict], system_
                     await on_audio(pcm, idx)
 
     drainer = asyncio.create_task(drain())
-    chunker, tasks, answer = SentenceChunker(first_min, rest_min), [], ""
+    chunker, tasks, answer, cut_by_length = SentenceChunker(first_min, rest_min), [], "", False
 
     async def dispatch(text: str) -> None:
         q: asyncio.Queue = asyncio.Queue()
@@ -96,6 +109,9 @@ async def run_turn(*, stt: STT, llm: LLM, tts: TTS, history: list[dict], system_
                 if on_search:
                     await on_search(delta.query, delta.announce)
                 continue
+            if isinstance(delta, LengthCut):  # réponse coupée par `llm.max_tokens` : l'historique ne gardera que les phrases entières
+                cut_by_length = True
+                continue
             answer += delta
             for ch in chunker.feed(delta):
                 await dispatch(ch)
@@ -109,8 +125,8 @@ async def run_turn(*, stt: STT, llm: LLM, tts: TTS, history: list[dict], system_
             t.cancel()
         raise
     answer = answer.strip()
-    history.append({"role": "assistant", "content": answer})
-    total = (time.perf_counter() - t0) * 1000
+    append_assistant(history, answer, cut_by_length)
+    total = elapsed_ms(t0)
     rec("turn_done", ms=round(total, 1), chunks=len(tasks))
     return TurnResult(user_text, answer, list(audio_parts), stt_ms, first_audio[0] if first_audio else total, total,
                       tts_failed=bool(tts_errors))

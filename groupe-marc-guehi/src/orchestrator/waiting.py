@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import asyncio
-import time
 
 from src.audio.pcm import SAMPLE_RATE_OUT, duration_s
+from src.metrics.clock import elapsed_s
 from src.orchestrator.response import ResponseState
 from src.orchestrator.session_config import SessionConfig, SessionDeps
 from src.orchestrator.state import StateMachine
@@ -18,7 +18,7 @@ class WaitingAudio:
         self.announces: list[asyncio.Task] = []    # annonces de recherche (synthétisées en parallèle de la recherche)
 
     def _since_detect(self) -> float:
-        return time.perf_counter() - self.resp.t_detect
+        return elapsed_s(self.resp.t_detect)
 
     def _record(self, f_text: str, dur: float, kind: str | None) -> int:
         idx = self.resp.reserve(f_text, dur)

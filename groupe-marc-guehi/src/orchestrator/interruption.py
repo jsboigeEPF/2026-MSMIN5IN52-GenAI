@@ -42,10 +42,10 @@ class Interruptions:
         d.rec("barge_in_detected", voiced_ms=d.endpointer.voiced_ms, state=self.sm.state.value)
         await self.sm.enter(State.BARGE_IN)
         await self.tasks.cancel_all()
-        if not resp.user_recorded and resp.current_audio:
+        if not resp.user_recorded and resp.current_audio and not resp.ignored:   # le bruit d'un tour ignoré n'est pas repris
             self.carry = resp.current_audio[0]  # la phrase pas encore transcrite sera reprise avec la suivante
         heard, truncated = resp.played_text(resp.played_s(t, self.cfg.playback_margin_s))
-        ref = self.history.interrupt(resp.turn_complete, heard, truncated)
+        ref = None if resp.ignored else self.history.interrupt(resp.turn_complete, heard, truncated)   # tour ignoré : rien en mémoire
         self._pending.append(_Pending(ref, list(resp.texts), list(resp.durs), resp.turn_complete, t))
         resp.reset()
         self.capture.strict_until = 0.0

@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 
 from src.audio.pcm import silence
+from src.metrics.clock import elapsed_ms, now_ns
 from src.orchestrator.capture import MIC_RATE, Capture
 from src.orchestrator.history import History
 from src.orchestrator.interruption import Interruptions
@@ -80,6 +81,17 @@ class ConversationSession:
         if self.state is State.SPEAKING and self.resp.turn_complete:
             self.capture.reset(self.cfg.strict_after_s)
             await self.sm.enter(State.LISTENING)
+
+    def on_playback_started(self, in_ms: float) -> None:
+        """Le client a planifié le premier échantillon de la réponse : il sera audible dans `in_ms` ms (latence de sortie comprise).
+        Trace `playback_first_sample` (METRICS : E2E = premier échantillon audible − fin de parole détectée). Une seule fois par
+        réponse ; ignoré sans audio envoyé (message en retard, après une interruption)."""
+        resp = self.resp
+        if self.state not in (State.THINKING, State.SPEAKING) or resp.first_audio_ns is None or resp.audible_ns is not None:
+            return
+        resp.audible_ns = now_ns() + int(in_ms * 1e6)
+        self.deps.rec("playback_first_sample", e2e_ms=round(elapsed_ms(resp.t_detect, resp.audible_ns), 1),
+                      send_to_audible_ms=round(elapsed_ms(resp.first_audio_ns, resp.audible_ns), 1), client_lead_ms=round(in_ms, 1))
 
     async def on_interrupted(self, played_s: float) -> None:
         await self.interruptions.on_client_ack(played_s)

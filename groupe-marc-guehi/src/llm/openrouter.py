@@ -2,14 +2,15 @@
 Avec un `searcher`, le modèle dispose de l'outil `web_search` (une recherche au plus par réponse)."""
 from __future__ import annotations
 
+import asyncio
 import json
 import re
-import time
 from collections.abc import AsyncIterator, Callable
 
 import httpx
 
-from src.interfaces import SearchNotice, WebSearch
+from src.interfaces import LengthCut, SearchNotice, WebSearch
+from src.metrics.clock import elapsed_ms, now_ns
 from src.metrics.cost import estimate_llm
 from src.search.openrouter_web import SearchError
 
@@ -97,7 +98,10 @@ class OpenRouterLLM:
     def __init__(self, client: httpx.AsyncClient, base_url: str, api_key: str, model: str, fallback_model: str | None = None,
                  max_tokens: int = 200, temperature: float = 0.6, prices: dict | None = None,
                  on_event: Callable | None = None, searcher: WebSearch | None = None,
-                 force_search: Callable[[str], bool] | None = None) -> None:
+                 force_search: Callable[[str], bool] | None = None, timeout_s: float = 60.0,
+                 first_token_timeout_s: float = 0.0) -> None:
+        self.timeout_s = timeout_s                        # délai réseau httpx (connexion, lecture entre deux morceaux)
+        self.first_token_timeout_s = first_token_timeout_s  # 0 = pas d'échéance ; sinon repli sur le modèle de secours
         self.client, self.url = client, base_url.rstrip("/") + "/chat/completions"
         self.headers = {"Authorization": f"Bearer {api_key}"}
         self.models = [m for m in (model, fallback_model) if m]
@@ -112,7 +116,7 @@ class OpenRouterLLM:
 
     async def stream(self, messages: list[dict], max_tokens: int | None = None,
                      allow_search: bool = True) -> AsyncIterator[str | SearchNotice]:
-        last: LLMError | None = None
+        last: Exception | None = None
         for model in self.models:
             started = False
             try:
@@ -120,12 +124,14 @@ class OpenRouterLLM:
                     started = True
                     yield delta
                 return
-            except LLMError as e:
+            except (LLMError, httpx.HTTPError) as e:  # erreur du service ou du réseau (connexion, délai, flux coupé)
                 if started:  # flux déjà entamé : on ne peut pas reprendre proprement
                     raise
                 last = e
-                self.emit("llm_fallback", provider=model, error=str(e)[:200])
-        raise last or LLMError("aucun modèle LLM configuré")
+                self.emit("llm_fallback", provider=model, error=f"{type(e).__name__}: {e}"[:200])
+        if last is None:
+            raise LLMError("aucun modèle LLM configuré")
+        raise LLMError(f"aucun modèle LLM n'a répondu ({type(last).__name__}: {last})"[:300]) from last
 
     async def _stream_one(self, model: str, messages: list[dict], max_tokens: int,
                           allow_search: bool = True) -> AsyncIterator[str | SearchNotice]:
@@ -159,11 +165,11 @@ class OpenRouterLLM:
             {"role": "assistant", "content": announce or None, "tool_calls": [
                 {"id": call["id"], "type": "function", "function": {"name": call["name"], "arguments": call["args"] or "{}"}}]},
             {"role": "tool", "tool_call_id": call["id"], "content": result}]
-        async for delta in self._request(model, follow, max_tokens, False, {}):
+        async for delta in self._request(model, follow, max_tokens, False, {}, first_token_timeout_s=0):  # SearchNotice déjà parti : pas de repli possible, donc pas d'échéance
             yield delta
 
     async def _request(self, model: str, messages: list[dict], max_tokens: int, use_tools: bool,
-                       calls: dict[int, dict], force: bool = False) -> AsyncIterator[str]:
+                       calls: dict[int, dict], force: bool = False, first_token_timeout_s: float | None = None) -> AsyncIterator[str]:
         """Une requête en flux. Les appels d'outil demandés par le modèle sont accumulés dans `calls` (index -> id, name, args)."""
         body = {"model": model, "stream": True, "max_tokens": max_tokens, "temperature": self.temperature,
                 "messages": messages, "reasoning": {"enabled": False}, "provider": {"sort": "latency"},
@@ -174,38 +180,49 @@ class OpenRouterLLM:
                 body["tool_choice"] = "required"
         guard = ToolMarkupGuard()
         self.emit("llm_request", provider=model, n_messages=len(messages))
-        t0 = time.perf_counter()
-        first, usage = False, {}
-        async with self.client.stream("POST", self.url, headers=self.headers, json=body, timeout=60) as r:
-            if r.status_code != 200:
-                raise LLMError(f"LLM HTTP {r.status_code} {(await r.aread())[:200]!r}")
-            async for line in r.aiter_lines():
-                if not line.startswith("data: ") or line.endswith("[DONE]"):
-                    continue
-                ev = json.loads(line[6:])
-                if "error" in ev:  # erreur dans le flux malgré HTTP 200
-                    raise LLMError(f"LLM erreur de flux {ev['error'].get('code')} {ev['error'].get('message')}")
-                usage = ev.get("usage") or usage
-                for ch in ev.get("choices", []):
-                    for tc in ch.get("delta", {}).get("tool_calls") or []:
-                        c = calls.setdefault(tc.get("index", 0), {"id": "", "name": "", "args": ""})
-                        c["id"] = tc.get("id") or c["id"]
-                        fn = tc.get("function") or {}
-                        c["name"] = fn.get("name") or c["name"]
-                        c["args"] += fn.get("arguments") or ""
-                    d = guard.feed(ch.get("delta", {}).get("content") or "")
-                    if d:
-                        if not first:
-                            first = True
-                            self.emit("llm_first_token", provider=model, ms=round((time.perf_counter() - t0) * 1000, 1))
-                        yield d
+        t0 = now_ns()
+        first, usage, finish = False, {}, None
+        try:
+            limit = self.first_token_timeout_s if first_token_timeout_s is None else first_token_timeout_s
+            async with asyncio.timeout(limit or None) as deadline:  # échéance du 1er signe de vie du modèle
+                async with self.client.stream("POST", self.url, headers=self.headers, json=body, timeout=self.timeout_s) as r:
+                    if r.status_code != 200:
+                        raise LLMError(f"LLM HTTP {r.status_code} {(await r.aread())[:200]!r}")
+                    async for line in r.aiter_lines():
+                        if not line.startswith("data: ") or line.endswith("[DONE]"):
+                            continue
+                        ev = json.loads(line[6:])
+                        if "error" in ev:  # erreur dans le flux malgré HTTP 200
+                            raise LLMError(f"LLM erreur de flux {ev['error'].get('code')} {ev['error'].get('message')}")
+                        usage = ev.get("usage") or usage
+                        for ch in ev.get("choices", []):
+                            finish = ch.get("finish_reason") or finish
+                            for tc in ch.get("delta", {}).get("tool_calls") or []:
+                                deadline.reschedule(None)
+                                c = calls.setdefault(tc.get("index", 0), {"id": "", "name": "", "args": ""})
+                                c["id"] = tc.get("id") or c["id"]
+                                fn = tc.get("function") or {}
+                                c["name"] = fn.get("name") or c["name"]
+                                c["args"] += fn.get("arguments") or ""
+                            d = guard.feed(ch.get("delta", {}).get("content") or "")
+                            if d:
+                                deadline.reschedule(None)
+                                if not first:
+                                    first = True
+                                    self.emit("llm_first_token", provider=model, ms=round(elapsed_ms(t0), 1))
+                                yield d
+        except TimeoutError as e:
+            raise LLMError(f"pas de premier jeton après {limit} s") from e
         if tail := guard.flush():
             yield tail
+        if finish == "length" and not calls:
+            self.emit("llm_length", provider=model, max_tokens=max_tokens)
+            yield LengthCut()
         if guard.active:
             self.emit("llm_tool_markup", provider=model, chars=len(guard.captured))
             if use_tools and not calls:  # l'appel d'outil était écrit en texte : on le traite comme un vrai appel
                 calls[0] = {"id": "call-markup", "name": "web_search", "args": json.dumps({"query": " ; ".join(guard.queries())})}
-        self.emit("llm_done", provider=model, ms=round((time.perf_counter() - t0) * 1000, 1),
+        self.emit("llm_done", provider=model, ms=round(elapsed_ms(t0), 1),
                   prompt_tokens=usage.get("prompt_tokens"), completion_tokens=usage.get("completion_tokens"))
         cost = usage.get("cost")
         if cost is None:

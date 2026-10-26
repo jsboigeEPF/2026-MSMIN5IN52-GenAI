@@ -1,11 +1,11 @@
 """Recherche web : OpenRouter /chat/completions avec le plugin `web` (résultats injectés dans le contexte du modèle)."""
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 
 import httpx
 
+from src.metrics.clock import elapsed_ms, now_ns
 from src.metrics.cost import estimate_llm
 
 
@@ -35,7 +35,7 @@ class OpenRouterWebSearch:
                 "messages": [{"role": "system", "content": SYSTEM.format(language=self.language)},
                              {"role": "user", "content": query}]}
         self.emit("search_request", provider=self.model, chars=len(query))
-        t0 = time.perf_counter()
+        t0 = now_ns()
         try:
             r = await self.client.post(self.url, headers=self.headers, json=body, timeout=self.timeout_s)
         except httpx.HTTPError as e:
@@ -47,7 +47,7 @@ class OpenRouterWebSearch:
             raise SearchError(f"recherche erreur {data['error'].get('code')} {data['error'].get('message')}")
         text = (data["choices"][0]["message"].get("content") or "").strip()
         usage = data.get("usage") or {}
-        self.emit("search_done", provider=self.model, ms=round((time.perf_counter() - t0) * 1000, 1), chars=len(text))
+        self.emit("search_done", provider=self.model, ms=round(elapsed_ms(t0), 1), chars=len(text))
         cost = usage.get("cost")
         if cost is None:
             cost = estimate_llm(self.prices, self.model, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))

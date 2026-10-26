@@ -16,7 +16,13 @@ Une étape = une session. ☐ à faire · ◐ commencé · ☑ fait. Échéance 
 | 9 ☑ | Accès internet (outil `web_search`, accroche d'attente, protection contre les appels d'outil écrits en texte) — **fait** | Vérifié avec les vrais services, en Chrome : question avec recherche (DECISIONS 13) |
 | 10 ☑ | Robustesse (2026-10-24) : l'agent **dit ce qu'il cherche** pendant la recherche web + 2e phrase si elle traîne ; **TTS de secours** (autre modèle OpenRouter) et réponse écrite si toute la voix est en panne ; bascule vers le mode texte **testée dans Chrome** — **fait** | Vérifié avec les vrais services (DECISIONS 15) ; mesure de la durée du silence résiduel à refaire en campagne |
 | 11 ◐ | Refactor de `ConversationSession` et cohérence des docs — **fait** (DECISIONS 17) ; condition écho (simulée hors ligne **faite**, en direct **prête mais non lancée**), balayages de seuils et de fin de tour, étude d'une fin de tour adaptative — **faits hors ligne** (DECISIONS 18) ; réglages recommandés **non appliqués** | Tests, `browser_smoke.py` et `ws_barge_test.py` en dry-run ; mesure en direct de l'écho et réglages : en attente de l'accord de l'étudiant |
+| 11b ◐ | Audit (2026-10-26) : lot A sécurité et coûts **fait** (DECISIONS 25) ; lots B robustesse (DECISIONS 26) et C mesure (DECISIONS 27) **faits** ; lot E docs **fait** (DECISIONS 28) ; lot D (propositions D1-D3) rédigé, en attente d'arbitrage | Tests, `browser_smoke.py` en dry-run ; vérification par un auditeur indépendant à chaque lot |
 | 12+ ☐ | Extensions restantes : routage entre APIs selon la latence, plus de voix. **Local écarté** (consigne du 2026-10-22 : APIs uniquement, confirmée le 2026-10-24) | Après lundi |
+
+### Évolutions faites après l'étape 11 (détail et preuves dans DECISIONS)
+- (19) accroche d'ouverture systématique et porte de niveau du VAD ; (20)-(21) recherche web forcée avec échappatoire `no_search` ;
+- (22) bouton « Couper le micro » ; (23) interface en deux vues Voix / Écrit, sous-titres par groupes de mots ; (24) accroches dupliquées corrigées ;
+- (25)-(27) audit du 2026-10-26 : sécurité et coûts, robustesse, mesure (`playback_first_sample`, horloge `monotonic_ns`). Propositions D1-D3 : en attente d'arbitrage de l'étudiant ; lot E (docs) fait.
 
 Cible réaliste : étapes 1–6 pour lundi (prototype), 7 si le temps le permet. Difficulté 4/5 en 6 jours : le barge-in propre et la campagne de mesure complète sont les éléments à risque.
 

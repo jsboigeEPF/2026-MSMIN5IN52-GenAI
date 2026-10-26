@@ -38,6 +38,7 @@ from src.audio.pcm import SAMPLE_RATE_OUT, read_wav, resample, wav_bytes
 from src.config import load_settings
 from src.factory import make_client
 from src.metrics.analysis import append_jsonl, wer
+from src.metrics.clock import elapsed_ms, now_ns
 from src.replay.client import ReplayClient
 from src.replay.mic_sim import MicSim
 from src.replay.trials import barge_trial, false_positive_trial, latency_turn
@@ -196,10 +197,10 @@ async def phase_stt(cfg: dict, out: Path, force: bool) -> None:
                     pcm = np.clip(np.round(x), -32768, 32767).astype(np.int16).tobytes()
                     row = {"utt_id": u["id"], "noise": noise, "snr": snr, "rep": rep, "ref": u["text"],
                            "audio_s": round(len(x) / 16000, 2)}
-                    t0 = time.perf_counter()
+                    t0 = now_ns()
                     try:
                         hyp = await stt.transcribe(pcm, 16000)
-                        row.update(hyp=hyp, wer=wer(u["text"], hyp), stt_ms=(time.perf_counter() - t0) * 1000)
+                        row.update(hyp=hyp, wer=wer(u["text"], hyp), stt_ms=elapsed_ms(t0))
                     except Exception as e:  # noqa: BLE001  une erreur ponctuelle ne doit pas arrêter la campagne
                         row.update(hyp=None, wer=None, error=f"{type(e).__name__}: {e}"[:200])
                     append_jsonl(path, row)

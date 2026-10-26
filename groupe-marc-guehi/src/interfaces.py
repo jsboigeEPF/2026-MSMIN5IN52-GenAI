@@ -18,9 +18,15 @@ class SearchNotice:
     announce: str = ""  # phrase courte écrite par le LLM pour dire ce qu'il cherche (vide : accroche générique)
 
 
+@dataclass(frozen=True)
+class LengthCut:
+    """Émis en fin de flux quand le modèle s'est arrêté sur la limite de jetons (`finish_reason: length`) : la réponse est coupée."""
+
+
 class LLM(Protocol):
-    def stream(self, messages: list[dict]) -> AsyncIterator[str | SearchNotice]:
-        """Génère la réponse token par token (delta de texte) ; peut intercaler un SearchNotice avant la réponse."""
+    def stream(self, messages: list[dict]) -> AsyncIterator[str | SearchNotice | LengthCut]:
+        """Génère la réponse token par token (delta de texte) ; peut intercaler un SearchNotice avant la réponse et termine
+        par un LengthCut si la réponse a atteint la limite de jetons."""
 
 
 class WebSearch(Protocol):

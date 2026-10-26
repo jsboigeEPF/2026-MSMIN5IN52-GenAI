@@ -9,10 +9,10 @@ Hypothèse [H] : durée TTS ≈ 1 min audio ≈ quelques centimes (équivalence 
 `coût = N_tours × (durée_parole_min × prix_STT + tokens_in × prix_in + tokens_out × prix_out + durée_réponse_s × prix_TTS_par_s)`.
 Ordre de grandeur [H] : 1 tour ≈ 0,001–0,005 €. Campagne complète de ≈1 000 tours ≈ 1–5 €. Le cloud n'est donc pas le facteur limitant en cascade ; les modèles realtime speech-to-speech (32/64 $ par 1M tokens audio) le seraient.
 
-**Garde-fous (à implémenter dès l'étape 2)**
+**Garde-fous** (état réel, vérifié dans le code le 2026-10-26 ; le cadrage initial prévoyait plus)
 - `--dry-run` : calcule et affiche le coût estimé sans appel payant (providers factices).
-- Compteur de coût persistant `data/cost_ledger.jsonl` ; arrêt dur si cumul > plafond configuré (`configs/budget.yaml`).
-- Plafond par campagne (€, nombre de tours, durée) ; confirmation interactive au-delà de 1 €.
+- Compteur de coût persistant `data/cost_ledger.jsonl` ; le plafond (`BUDGET_MAX_EUR` dans `.env`) est **indicatif** : avertissement au dépassement, arrêt dur seulement si `hard_stop` est activé (`CostLedger`, désactivé par défaut). Pas de `configs/budget.yaml`.
+- *Non implémenté* : plafond par campagne et confirmation interactive au-delà de 1 € (la campagne affiche plan, durée et coût avec `--dry-run`).
 - Limites de dépense configurées aussi côté tableau de bord du fournisseur (action manuelle).
 - Cache des audios TTS de test (un dialogue n'est synthétisé qu'une fois).
 

@@ -15,7 +15,7 @@ flowchart LR
   TXT[Entrée texte - secours] --> ORCH
   ORCH --> MET[(metrics JSONL)]
 ```
-Toutes les briques tournent en tâches `asyncio` reliées par des files bornées ; chaque événement horodaté part vers `src/metrics`.
+Toutes les briques tournent en tâches `asyncio` reliées par des files `asyncio.Queue` **non bornées** (le TTS produit plus vite que le temps réel : le PCM d'une réponse attend dans la file, hypothèse : quelques secondes d'audio au plus, non mesuré) ; chaque événement horodaté part vers `src/metrics`.
 
 ## Modules de l'orchestrateur (`src/orchestrator/`)
 `session.py` est un coordinateur mince ; configuration : `SessionConfig` (depuis `configs/base.yaml`) et dépendances : `SessionDeps` (`session_config.py`).
@@ -62,7 +62,7 @@ Le LLM reçoit l'outil `web_search`. Flux : 1re requête en flux → si `tool_ca
 Le LLM remplit `announce` (phrase courte qui dit ce qu'il cherche) ; la session la synthétise pendant la recherche et la joue avant la réponse (repli : accroche générique pré-enregistrée). Si rien n'a commencé `filler.search_wait_after_s` après l'avis de recherche, une 2e phrase brève est jouée. Les rangs des morceaux ne doivent plus se décaler dès que la réponse démarre.
 
 ## STT spéculatif et repli
-Dès `stt.speculative_ms` de silence dans un énoncé, la session lance le STT sur l'audio déjà capté ; la parole qui reprend l'annule ; à la fin de tour, `run_turn(stt_task=…)` réutilise la tâche. Secours TTS : `FallbackTTS` (2e modèle, avant le 1er octet) ; si tout le TTS échoue, le texte reste affiché (`tts_down`). Si le STT échoue : repli `FallbackSTT` (2e fournisseur), puis après `stt.fallback_to_text_after` échecs consécutifs la session passe en `text_only` (micro ignoré) jusqu'à `voice_retry`.
+Dès `stt.speculative_ms` de silence dans un énoncé, la session lance le STT sur l'audio déjà capté ; la parole qui reprend l'annule ; à la fin de tour, `run_turn(stt_task=…)` réutilise la tâche. Secours TTS : `FallbackTTS` (2e modèle, avant le 1er octet) ; si tout le TTS échoue, le texte reste affiché (`tts_down`). LLM : erreur réseau ou absence de 1er jeton après `llm.first_token_timeout_s` → `LLM_MODEL_ALT` (avant tout texte émis). Une transcription vide ou de bruit (`stt.ignore_phrases`) n'ouvre pas de tour (message `ignored`). Si le STT échoue : repli `FallbackSTT` (2e fournisseur), puis après `stt.fallback_to_text_after` échecs consécutifs la session passe en `text_only` (micro ignoré) jusqu'à `voice_retry`.
 
 ## Écho
 Casque recommandé pour les mesures. Sans casque : coupure de la détection pendant les premières ms de lecture + seuil relevé, ou AEC (voir RISKS_AND_PLAN_B).
@@ -74,8 +74,9 @@ Même orchestrateur, source `TXT` à la place de VAD+STT ; sortie texte (et TTS 
 Une source `AudioFile` horodatée remplace le micro (même interface) ; permet tests, bruit contrôlé et plan B.
 
 ## Protocole WebSocket du prototype (`/ws`)
-Client → serveur : binaire = PCM16 16 kHz mono (trames de 512 échantillons) ; JSON `{"type":"text","text":…}` (mode texte), `{"type":"playback_ended"}`, `{"type":"interrupted","played_s":…}`, `{"type":"voice_retry"}`, `{"type":"mute","muted":bool}` (micro coupé : trames non envoyées, serveur sourd, énoncé en cours abandonné ; le texte reste possible).
-Serveur → client : binaire = PCM16 24 kHz mono ; JSON `ready` (voix), `state` (listening/thinking/speaking), `vad`, `transcript`, `agent_chunk`, `searching`, `metrics`, `audio_end`, `interrupt`, `truncate`, `fallback` (`mode`: text/voice), `tts_down`, `error`.
+Accès : en-tête `Origin` contrôlé (`server.allowed_origin_hosts`, refus 1008), une seule session à la fois (2e connexion : `error` puis fermeture 1013, après `server.busy_grace_s`). Messages malformés ignorés (trace `ws_bad_message`), texte limité à `server.max_text_chars` (sinon `error`).
+Client → serveur : binaire = PCM16 16 kHz mono (trames de 512 échantillons) ; JSON `{"type":"text","text":…}` (mode texte), `{"type":"playback_started","in_ms":…}` (premier échantillon de la réponse planifié, audible dans `in_ms` ms ; 0 ≤ `in_ms` ≤ `server.max_playback_lead_ms` ; une fois par réponse ; ignoré sinon), `{"type":"playback_ended"}`, `{"type":"interrupted","played_s":…}`, `{"type":"voice_retry"}`, `{"type":"mute","muted":bool}` (micro coupé : trames non envoyées, serveur sourd, énoncé en cours abandonné ; le texte reste possible).
+Serveur → client : binaire = PCM16 24 kHz mono ; JSON `ready` (voix), `state` (listening/thinking/speaking), `vad`, `transcript`, `agent_chunk`, `searching`, `metrics`, `audio_end`, `interrupt`, `truncate`, `fallback` (`mode`: text/voice), `tts_down`, `ignored` (transcription vide ou bruit : pas de réponse, la bulle de l'utilisateur est retirée), `error`.
 
 ## Structure cible
 ```

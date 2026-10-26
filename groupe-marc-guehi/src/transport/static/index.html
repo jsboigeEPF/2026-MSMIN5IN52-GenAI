@@ -183,7 +183,11 @@ function enqueue(buf) {
   src.connect(analyser);
   const t = Math.max(playHead, ctx.currentTime + 0.03);
   src.start(t);
-  if (playStart === null) playStart = t;   // début de la réponse courante (accroche comprise)
+  if (playStart === null) {   // début de la réponse courante (accroche comprise)
+    playStart = t;
+    // mesure : le serveur trace `playback_first_sample` (instant où le premier échantillon est audible, latence de sortie comprise)
+    if (ws?.readyState === 1) ws.send(JSON.stringify({ type: "playback_started", in_ms: Math.max(0, Math.round((t - ctx.currentTime + (ctx.outputLatency || 0)) * 1000)) }));
+  }
   playHead = t + ab.duration;
   pending++;
   stats.chunksPlayed++;
@@ -232,6 +236,7 @@ function onMessage(ev) {
     stats.transcripts.push(m.text); curUser = null;
     if (!curAgent) curAgent = addMsg("agent", "…", "wait");
   }
+  else if (m.type === "ignored") { curUser?.remove(); curUser = null; curAgent = null; }   // transcription vide ou bruit : rien à répondre
   else if (m.type === "agent_chunk") {
     // le texte du morceau arrive juste avant son audio : ses mots apparaissent au rythme de la lecture
     const a = ensureAgent();

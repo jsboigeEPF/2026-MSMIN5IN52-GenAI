@@ -29,6 +29,7 @@ class SessionConfig:
     speculative_ms: int
     text_fallback_after: int
     search_wait_after_s: float
+    ignore_phrases: tuple[str, ...] = ()
 
     @classmethod
     def from_dict(cls, cfg: dict) -> SessionConfig:
@@ -42,7 +43,7 @@ class SessionConfig:
             strict_transitions=s["strict_transitions"], filler_min_speech_ms=f.get("min_speech_ms", 0),
             filler_hint=llm["filler_hint"], first_min=t["first_chunk_min_chars"], rest_min=t["min_chunk_chars"],
             speculative_ms=stt.get("speculative_ms", 0), text_fallback_after=stt.get("fallback_to_text_after", 0),
-            search_wait_after_s=f.get("search_wait_after_s", 0.0))
+            search_wait_after_s=f.get("search_wait_after_s", 0.0), ignore_phrases=tuple(stt.get("ignore_phrases", ())))
 
 
 @dataclass

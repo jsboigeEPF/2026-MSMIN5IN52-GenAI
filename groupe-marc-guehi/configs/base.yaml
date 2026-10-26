@@ -46,6 +46,8 @@ filler:
     - "Je n'ai pas encore la réponse."
     - "Ça arrive, un petit instant."
 llm:
+  timeout_s: 60             # délai réseau du flux LLM (connexion, lecture entre deux morceaux)
+  first_token_timeout_s: 8  # sans premier jeton (ou appel d'outil) après ce délai : bascule sur le modèle de secours (LLM_MODEL_ALT) ; 0 = off. Hypothèse : le TTFT mesuré est 0,3–1 s, pics à 6,5 s
   max_tokens: 200
   temperature: 0.6
   system_prompt: >
@@ -63,9 +65,19 @@ llm:
     Une phrase d'attente (« je regarde ça ») est dite automatiquement pendant la recherche (renseigne `announce` : une phrase
     très courte qui dit ce que tu cherches). Ne la répète pas et n'annonce pas que tu cherches : donne directement le résultat.
 stt:
+  timeout_s: 60             # durée maximale d'une tentative de transcription (doit être > 0 ; contrairement au LLM, 0 n'est pas « sans limite ») ; dépassée : STT de secours
   language: fr
   fallback_model: qwen/qwen3-asr-1.7b   # OpenRouter /audio/transcriptions, essayé si le Whisper de l'école échoue
   fallback_to_text_after: 2             # échecs STT consécutifs (secours compris) avant de basculer en mode texte
+  ignore_phrases:                       # transcriptions ignorées (avec le vide, les annotations « [Musique] » et le texte sans mot) : hallucinations connues de Whisper sur du bruit (hypothèse, non mesurée ici) ; égalité exacte après normalisation
+    - Sous-titres réalisés par la communauté d'Amara.org
+    - Sous-titres par Amara.org
+    - Sous-titrage Société Radio-Canada
+    - Sous-titrage ST' 501
+    - Merci d'avoir regardé cette vidéo
+    - Merci d'avoir regardé
+    - Abonnez-vous à la chaîne
+    - Thanks for watching
   speculative_ms: 200                   # STT lancé après ce silence, avant la fin de tour (annulé si la parole reprend) ; 0 = off
 search:                                 # accès internet : outil `web_search` appelé par le LLM (function calling)
   enabled: true
@@ -77,6 +89,7 @@ search:                                 # accès internet : outil `web_search` a
   skip_max_words: 0                     # énoncé de ce nombre de mots ou moins : pas de recherche forcée
   skip_regex: "((bonjour|salut|coucou|merci|ok|okay|super|parfait|très bien|oui|non|d'accord|beaucoup|bien|au revoir|à bientôt|bonne journée|bonne soirée|c'est gentil|et toi|ça va|comment vas-tu|comment ça va|tu vas bien) ?)+"  # énoncé entièrement fait de formules de politesse (ponctuation ignorée)
 tts:
+  timeout_s: 60             # délai réseau du TTS (connexion, lecture entre deux morceaux d'audio)
   fallback_voice: longanhuan_v3.6   # voix du TTS de secours (TTS_MODEL_ALT, PCM) si MiniMax échoue ; accent marqué en français
   response_format: mp3      # MiniMax ne streame qu'en mp3 (décodage en PCM côté serveur)
   min_chunk_chars: 20       # découpe en phrases avant envoi au TTS
@@ -85,5 +98,10 @@ tts:
     French_Female_Speech_New: 1.3
     French_Male_Speech_New: 1.15
 keepalive_s: 25            # appels factices périodiques (Whisper de l'école, connexions)
+server:
+  allowed_origin_hosts: [localhost, 127.0.0.1, "::1"]   # hôtes autorisés dans l'en-tête Origin de /ws (ajouter l'IP/le nom pour un accès depuis le réseau local)
+  busy_grace_s: 2.0         # une 2e connexion attend ce délai que la session en cours se ferme (rechargement de page) avant d'être refusée
+  max_playback_lead_ms: 10000   # `playback_started.in_ms` au-delà (ou négatif) : message rejeté
+  max_text_chars: 2000      # longueur maximale d'un message texte du client (au-delà : rejeté avec un message `error`)
 metrics:
   trace_dir: data/traces
