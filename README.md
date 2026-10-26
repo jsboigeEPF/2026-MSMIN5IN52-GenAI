@@ -32,7 +32,10 @@ Suivi détaillé, checklist et décisions en attente : [`SUIVI.md`](SUIVI.md).
 - Avant `write_file`, `create_directory` ou `move_file`, le client affiche
   l'action proposée et attend que l'utilisateur tape exactement `OUI`. Il
   ajoute lui-même `confirmed=true` après cet accord. Un refus n'envoie pas
-  l'appel de modification au serveur.
+  l'appel de modification au serveur et arrête la demande en cours.
+- Prompt système en français : chemins relatifs à `sandbox/`, lister avant de
+  deviner, ne pas demander de confirmation dans la réponse. Les appels en
+  lecture sont affichés avec leurs arguments.
 - Validation des chemins et limites d'accès au niveau applicatif ; métadonnées
   d'audit enregistrées dans `sandbox/.mcp_audit.jsonl`.
 - Vérification manuelle du client : découverte des cinq outils et appel réussi

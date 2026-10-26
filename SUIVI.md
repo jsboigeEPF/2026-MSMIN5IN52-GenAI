@@ -73,9 +73,11 @@ Machine de référence : RTX 5060 8 Go, Ollama 0.23.2, Python 3.12, `mcp` 1.30.0
 - [x] Journal d'audit : succès et refus enregistrés, contenu jamais journalisé (seulement sa taille)
 
 ### Bloc B — Client
-- [ ] Prompt système en français : rôle, chemins relatifs à `sandbox/`, « en cas de doute, appelle `list_files` »
-- [ ] Afficher chaque appel d'outil avec ses arguments (aujourd'hui, seuls les appels de modification les montrent)
-- [ ] Signaler une réponse vide du modèle (aujourd'hui, une ligne vide s'affiche)
+- [x] Prompt système en français (`SYSTEM_PROMPT` dans `demo_client.py`) : rôle, chemins relatifs, lister avant de deviner, ne pas demander de confirmation en texte
+- [x] Afficher chaque appel en lecture avec ses arguments (`Appel en lecture : ...`)
+- [x] Signaler une réponse vide du modèle
+- [x] Un refus (ou une fin d'entrée pendant la confirmation) arrête la demande en cours
+- [x] Serveur : descriptions d'outils et messages d'erreur plus explicites pour le LLM (`.` = racine, récursif par défaut, `mode` obligatoire)
 - [ ] Flèches et historique au clavier (`import readline`)
 - [ ] Ctrl+C : quitter proprement (aujourd'hui : traceback, voir §6)
 - [ ] Tests du client avec un **faux Ollama** : accord `OUI` → appel envoyé ; refus → aucun appel de modification reçu par le serveur
@@ -137,3 +139,40 @@ Machine de référence : RTX 5060 8 Go, Ollama 0.23.2, Python 3.12, `mcp` 1.30.0
 - Limite constatée : un appel rejeté par la validation des types (mauvais
   type, argument manquant) n'atteint pas l'outil et n'est donc **pas
   journalisé**. Documenté dans le README (contrat du serveur).
+
+### 26/10 — session 1, étape B1 (client avec Qwen)
+- Méthode de mesure, sans clavier : envoyer les questions par un pipe, puis
+  lire les nouvelles lignes du journal d'audit, par exemple
+  `printf 'question\nnon\n/quit\n' | python demo_client.py --model qwen3:8b`.
+  La ligne qui suit une question sert de réponse à la confirmation si le
+  modèle propose une modification. Le modèle est aléatoire : toujours faire
+  plusieurs essais.
+- Ajouts : prompt système, affichage des appels en lecture, réponse vide
+  signalée.
+- Défauts trouvés et corrigés :
+  - Après un refus, Qwen reproposait la même écriture jusqu'à la limite de 8
+    appels (environ 2 min). **Désormais, un refus arrête la demande.**
+  - Une fin d'entrée (`EOFError`) pendant la confirmation était traitée comme
+    une erreur d'outil et la boucle continuait. Elle compte maintenant comme
+    un refus.
+  - Qwen demandait parfois la confirmation dans sa réponse au lieu d'appeler
+    l'outil ; le prompt système le lui interdit.
+  - Qwen essayait `list_files("/")` jusqu'à 4 fois et oubliait `mode`. Les
+    descriptions d'outils (docstrings, que le LLM lit) et le message d'erreur
+    des chemins absolus indiquent maintenant quoi faire.
+  - Piège rencontré : en réécrivant la docstring de `list_files`, la mention
+    « récursif par défaut » avait disparu. Qwen passait alors
+    `recursive=false`, ne voyait pas `data/` et répondait « aucune donnée »
+    (3 échecs sur 4). La mention a été remise. **Les docstrings des outils font
+    partie du prompt : les modifier avec prudence et re-mesurer.**
+- Mesures finales avec `qwen3:8b` (scénario « Écris un résumé des
+  installations sportives de Cachan dans resume.txt ») :
+  - refus : 4 essais sur 4 avec le chemin idéal (liste récursive → lecture →
+    proposition → arrêt), 29 à 49 s ;
+  - accord `OUI` : 3 essais sur 3 avec le fichier écrit et le journal
+    `approved_attempt` puis `success`, 36 à 57 s ;
+  - questions en lecture, `../../etc/passwd` et « qui es-tu ? » : réponses
+    correctes en français. Avec le prompt système, Qwen refuse lui-même
+    `../../etc/passwd` sans appeler le serveur : pour montrer le refus côté
+    serveur, utiliser les tests ou MCP Inspector.
+  - Avant ces changements : 5 appels dont 3 ratés pour une simple lecture.

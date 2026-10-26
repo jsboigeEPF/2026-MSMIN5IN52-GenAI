@@ -17,6 +17,17 @@ from mcp.client.stdio import stdio_client
 PROJECT_DIR = Path(__file__).resolve().parent
 MUTATING_TOOLS = {"write_file", "create_directory", "move_file"}
 MAX_TOOL_ROUNDS = 8
+SYSTEM_PROMPT = """Tu es un assistant francophone qui consulte et modifie des fichiers grâce à des outils MCP.
+Tu n'as accès qu'au dossier sandbox/, et tous les chemins sont relatifs à ce dossier :
+écris "data/fichier.json", jamais "sandbox/data/fichier.json", "/" ni un chemin absolu.
+Pour lister tout le sandbox, appelle list_files sans argument.
+Si tu ne connais pas le chemin exact d'un fichier, appelle d'abord list_files au lieu de deviner.
+Les données de l'utilisateur sont dans le sandbox : avant de répondre qu'une information est absente,
+liste les fichiers et lis ceux qui semblent pertinents.
+N'invente jamais le contenu d'un fichier : lis-le avec read_file.
+Le client demande lui-même l'accord de l'utilisateur avant write_file, create_directory et move_file :
+ne demande pas de confirmation dans ta réponse, appelle directement l'outil.
+Réponds toujours en français, de façon concise."""
 
 
 def ollama_chat(base_url: str, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
@@ -106,7 +117,10 @@ def display_mutation(tool_name: str, arguments: dict[str, Any]) -> None:
 
 def ask_consent(tool_name: str, arguments: dict[str, Any]) -> bool:
     display_mutation(tool_name, arguments)
-    answer = input("Pour autoriser cette opération, tape exactement OUI : ").strip()
+    try:
+        answer = input("Pour autoriser cette opération, tape exactement OUI : ").strip()
+    except EOFError:
+        return False
     return answer == "OUI"
 
 
@@ -142,7 +156,10 @@ async def run_chat(session: ClientSession, model: str, ollama_url: str, mcp_tool
         if not prompt:
             continue
 
-        messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ]
         for _ in range(MAX_TOOL_ROUNDS):
             assistant_message = await asyncio.to_thread(
                 ollama_chat, ollama_url, model, messages, ollama_tools
@@ -150,9 +167,11 @@ async def run_chat(session: ClientSession, model: str, ollama_url: str, mcp_tool
             messages.append(assistant_message)
             tool_calls = assistant_message.get("tool_calls") or []
             if not tool_calls:
-                print(f"\n{model} > {assistant_message.get('content', '')}\n")
+                content = (assistant_message.get("content") or "").strip()
+                print(f"\n{model} > {content or '(réponse vide : ni texte ni appel d’outil reconnu)'}\n")
                 break
 
+            refused = False
             for call in tool_calls:
                 function = call.get("function", {})
                 tool_name = function.get("name")
@@ -163,15 +182,16 @@ async def run_chat(session: ClientSession, model: str, ollama_url: str, mcp_tool
                         raise ValueError(f"Outil inconnu : {tool_name!r}.")
 
                     if tool_name in MUTATING_TOOLS:
+                        # A refusal ends the whole request, otherwise the model keeps proposing it again.
                         if not ask_consent(tool_name, arguments):
-                            tool_output = "Opération refusée par l'utilisateur ; aucun appel MCP de modification n'a été envoyé."
-                            print("Opération refusée.\n")
-                        else:
-                            # Only the client sets this flag, and only after the user typed OUI.
-                            arguments["confirmed"] = True
-                            result = await session.call_tool(tool_name, arguments)
-                            tool_output = mcp_result_text(result)
+                            refused = True
+                            break
+                        # Only the client sets this flag, and only after the user typed OUI.
+                        arguments["confirmed"] = True
+                        result = await session.call_tool(tool_name, arguments)
+                        tool_output = mcp_result_text(result)
                     else:
+                        print(f"Appel en lecture : {tool_name} {json.dumps(arguments, ensure_ascii=False)}")
                         result = await session.call_tool(tool_name, arguments)
                         tool_output = mcp_result_text(result)
                 except Exception as exc:
@@ -181,6 +201,9 @@ async def run_chat(session: ClientSession, model: str, ollama_url: str, mcp_tool
                 messages.append(
                     {"role": "tool", "tool_name": str(tool_name), "content": tool_output}
                 )
+            if refused:
+                print("Opération refusée : aucun appel de modification n'a été envoyé, demande arrêtée.\n")
+                break
         else:
             print(f"Le modèle a atteint la limite de {MAX_TOOL_ROUNDS} appels d'outils pour cette demande.\n")
 
