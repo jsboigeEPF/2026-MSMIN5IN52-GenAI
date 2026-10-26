@@ -38,6 +38,19 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[de
 cp .env.example .env   # puis renseigner les clés (jamais commitées)
 ```
 
+### Windows (PowerShell)
+
+Les commandes de ce README sont écrites pour macOS/Linux ; sous Windows :
+
+| macOS / Linux | Windows (PowerShell) |
+|---|---|
+| `.venv/bin/python` | `.venv\Scripts\python` |
+| `.venv/bin/uvicorn` | `.venv\Scripts\uvicorn` |
+| `cp .env.example .env` | `Copy-Item .env.example .env` |
+| `VOICE_DRY_RUN=1 commande` | `$env:VOICE_DRY_RUN="1"; commande` (puis `Remove-Item Env:VOICE_DRY_RUN`) |
+
+Pour afficher correctement les accents dans la console : `$env:PYTHONUTF8="1"`. Port déjà utilisé : `netstat -ano | findstr :8000`, ou choisir un autre `--port` (les scripts de test visent le port 8765 ou l'URL passée en option). Le test `tests/test_mp3.py` est ignoré sans `ffmpeg`. Le code a été développé sous macOS ; le comportement sous Windows n'a pas été exécuté (lecture du code et correction des points non portables seulement).
+
 ## Utilisation
 
 ```bash

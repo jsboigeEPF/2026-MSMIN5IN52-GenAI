@@ -32,7 +32,7 @@ async def main() -> None:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-warmup", action="store_true")
     ap.add_argument("--out", default="data/out/turn.wav")
-    ap.add_argument("--play", action="store_true", help="joue le résultat avec afplay (macOS)")
+    ap.add_argument("--play", action="store_true", help="joue le résultat (winsound sous Windows, afplay sous macOS, aplay sous Linux)")
     a = ap.parse_args()
     if not (a.text or a.audio_in or a.dry_run):
         ap.error("fournir --text, --audio-in ou --dry-run")
@@ -75,7 +75,12 @@ async def main() -> None:
     if ledger:
         print(f"coût session cumulé : {ledger.total_usd:.4f} $ (journal data/cost_ledger.jsonl)")
     if a.play:
-        await (await asyncio.create_subprocess_exec("afplay", str(out))).wait()
+        if sys.platform == "win32":
+            import winsound
+            await asyncio.to_thread(winsound.PlaySound, str(out), winsound.SND_FILENAME)
+        else:
+            player = "afplay" if sys.platform == "darwin" else "aplay"
+            await (await asyncio.create_subprocess_exec(player, str(out))).wait()
 
 
 if __name__ == "__main__":

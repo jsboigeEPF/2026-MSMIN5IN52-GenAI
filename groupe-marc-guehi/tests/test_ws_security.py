@@ -147,7 +147,7 @@ def test_keepalive_calls_are_counted_in_the_ledger_when_a_session_is_open(tmp_pa
     probes = asyncio.run(_run_keepalive(lambda: True, tmp_path / "l.jsonl"))
     calls = probes[0].calls
     assert calls >= 2 and all(p.calls == calls for p in probes)
-    lines = (tmp_path / "l.jsonl").read_text().splitlines()
+    lines = (tmp_path / "l.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(lines) == 3 * calls                      # une ligne de ledger par appel
     assert {json.loads(x)["provider"] for x in lines} == {"probe"}
 

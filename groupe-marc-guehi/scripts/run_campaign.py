@@ -334,7 +334,7 @@ async def phase_echo(cfg: dict, out: Path, stim: Path, force: bool) -> None:
 @contextlib.asynccontextmanager
 async def server(out: Path, name: str, filler: bool):
     env = {**os.environ, "VOICE_FILLER": "1" if filler else "0"}
-    logf = (out / f"server_{name}.log").open("w")
+    logf = (out / f"server_{name}.log").open("w", encoding="utf-8")
     proc = await asyncio.create_subprocess_exec(sys.executable, "-m", "uvicorn", "src.transport.app:app", "--port", str(PORT),
                                                 "--log-level", "warning", cwd=ROOT, env=env, stdout=logf, stderr=logf)
     try:
@@ -423,7 +423,7 @@ def cost_total() -> float:
     p = ROOT / "data" / "cost_ledger.jsonl"
     if not p.exists():
         return 0.0
-    return sum(json.loads(line).get("cost_usd", 0.0) for line in p.read_text().splitlines() if line.strip())
+    return sum(json.loads(line).get("cost_usd", 0.0) for line in p.read_text(encoding="utf-8").splitlines() if line.strip())
 
 
 async def main() -> None:
