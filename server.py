@@ -31,13 +31,16 @@ class PathRejected(ValueError):
 def _safe_path(raw_path: str, *, allow_root: bool = False) -> Path:
     """Resolve a client path below ROOT and reject traversal and symlinks."""
     if not isinstance(raw_path, str) or not raw_path.strip():
-        raise PathRejected("Le chemin doit être une chaîne non vide.")
+        raise PathRejected("Le chemin doit être une chaîne non vide ('.' désigne la racine de sandbox/).")
     if "\x00" in raw_path or "\\" in raw_path:
         raise PathRejected("Le chemin contient un caractère interdit.")
 
     relative = PurePosixPath(raw_path)
     if relative.is_absolute() or ".." in raw_path.split("/"):
-        raise PathRejected("Seuls les chemins relatifs à sandbox/ sont autorisés.")
+        raise PathRejected(
+            "Seuls les chemins relatifs à sandbox/ sont autorisés : écris par exemple "
+            "'data/fichier.json', ou '.' pour la racine de sandbox/."
+        )
 
     candidate = ROOT.joinpath(*relative.parts)
     if (candidate == ROOT and not allow_root) or candidate == AUDIT_FILE:
@@ -126,7 +129,7 @@ def read_file(path: str) -> str:
 
 @mcp.tool()
 def list_files(path: str = ".", recursive: bool = True) -> str:
-    """List files and directories inside sandbox/. Defaults to a recursive listing of the whole sandbox."""
+    """List files and directories inside sandbox/, recursively by default (whole tree, subdirectories included). path is relative to sandbox/: "." (the default) is its root; "/" and absolute paths are rejected."""
     args = _audit_arguments(path=path if isinstance(path, str) else repr(path), recursive=recursive)
     try:
         directory = _safe_path(path, allow_root=True)
@@ -191,7 +194,7 @@ def write_file(
     mode: Literal["overwrite", "append"],
     confirmed: StrictBool = False,
 ) -> str:
-    """Create/replace or append to a UTF-8 file inside sandbox/. Requires confirmed=true."""
+    """Create/replace or append to a UTF-8 file inside sandbox/. mode is required: "overwrite" replaces the file, "append" adds to its end. Requires confirmed=true."""
     args = _audit_arguments(
         path=path if isinstance(path, str) else repr(path),
         content_bytes=len(content.encode("utf-8")) if isinstance(content, str) else None,
