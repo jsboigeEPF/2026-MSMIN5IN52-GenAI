@@ -16,8 +16,8 @@ Ordre décidé le 26/10, à la fin de la session 1 :
    et fusionnée dans `master`.
 2. **Bloc D, jusqu'à l'ouverture de la PR : obligatoire avant le 26/10 à
    23:59** (1 h à 1 h 30).
-3. B3 : tests du client avec un faux Ollama, consentement et pannes (45 min).
-4. B2 : flèches et Ctrl+C (15 min).
+3. ~~B3 : tests du client avec un faux Ollama~~ : fait le 26/10 (session 2).
+4. ~~B2 : flèches et Ctrl+C~~ : fait le 26/10 (session 2).
 5. B4 : démo de secours sans Ollama (15 min).
 6. Bloc C : résultats Qwen/Mistral dans le README (1 h).
 7. Slides, puis extensions facultatives (OAuth, prompts MCP, Open WebUI),
@@ -26,7 +26,7 @@ Ordre décidé le 26/10, à la fin de la session 1 :
 Suggestions d'un membre du groupe, comparées à l'état actuel : jeu de données
 public ✅ (`sandbox/data/`) ; client avec consentement réel ✅ ; tests des
 contrats, de l'absence d'autorisation et des chemins hostiles ✅ ; tests du
-consentement côté client et des erreurs de transport ❌ (= B3) ; extensions
+consentement côté client et des erreurs de transport ✅ (B3, session 2) ; extensions
 facultatives (= point 7).
 
 ## 1. Contexte en bref
@@ -49,7 +49,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 
-# Tests automatisés (sans Ollama, sandbox temporaire, < 1 s)
+# Tests automatisés : 29 tests, environ 5 s, sans Ollama ni GPU
+# (tests/test_server.py : serveur ; tests/test_client.py : client)
 python -m unittest discover -s tests -v
 
 # Client de démo (Ollama doit tourner)
@@ -74,6 +75,14 @@ Node 24 (nécessaire pour `mcp dev server.py`, c'est-à-dire MCP Inspector).
 - Les tests ne touchent **jamais** le vrai `sandbox/` : `server.ROOT` et
   `server.AUDIT_FILE` sont redirigés vers un dossier temporaire (voir
   `TestAvecSandbox` dans [tests/test_server.py](tests/test_server.py)).
+- Tests du client ([tests/test_client.py](tests/test_client.py)) : le **faux
+  Ollama** remplace `demo_client.ollama_chat` par une fonction qui renvoie des
+  réponses écrites à l'avance (`appel_outil(...)`, `texte(...)`), et
+  `builtins.input` est remplacé par la liste des saisies de l'utilisateur.
+  Les pannes et Ctrl+C sont testés en lançant le vrai client dans un
+  processus séparé.
+- Piège : `pkill -f demo_client.py` tue aussi le shell dont la commande
+  contient ce texte. Utiliser `pgrep -f "[d]emo_client"` avec prudence.
 - Pour vérifier qu'un test n'est pas creux : désactiver volontairement la
   protection testée (par exemple `mock.patch.object(server, "_require_confirmation", ...)`)
   et vérifier que le test échoue.
@@ -101,10 +110,10 @@ Node 24 (nécessaire pour `mcp dev server.py`, c'est-à-dire MCP Inspector).
 - [x] Signaler une réponse vide du modèle
 - [x] Un refus (ou une fin d'entrée pendant la confirmation) arrête la demande en cours
 - [x] Serveur : descriptions d'outils et messages d'erreur plus explicites pour le LLM (`.` = racine, récursif par défaut, `mode` obligatoire)
-- [ ] Flèches et historique au clavier (`import readline`)
-- [ ] Ctrl+C : quitter proprement (aujourd'hui : traceback, voir §6)
-- [ ] Tests du client avec un **faux Ollama** : accord `OUI` → appel envoyé ; refus → aucun appel de modification reçu par le serveur
-- [ ] Tests des pannes : Ollama arrêté, serveur MCP qui ne démarre pas → message clair et sortie propre
+- [x] Flèches et historique au clavier (`import readline`, ignoré sous Windows)
+- [x] Ctrl+C : quitte immédiatement avec « Fin du client. », à l'invite comme pendant l'attente du modèle
+- [x] Tests du client avec un **faux Ollama** : `OUI` → écriture reçue ; refus (`non`, `oui`, vide...) → rien reçu et modèle pas relancé ; fin d'entrée et Ctrl+C pendant la confirmation → rien reçu ; `confirmed=true` mis par le modèle ne contourne pas la confirmation ; outil inconnu, JSON invalide, réponse vide, limite de 8 appels
+- [x] Tests des pannes : Ollama injoignable, serveur MCP absent → message clair, code 1, pas de traceback
 - [ ] Le faux Ollama sert aussi de plan B pour la soutenance si Ollama manque
 
 ### Bloc C — Mesures avec de vrais modèles
@@ -126,12 +135,15 @@ Node 24 (nécessaire pour `mcp dev server.py`, c'est-à-dire MCP Inspector).
 1. **3 ou 5 outils ?** Le sujet parle de « trois outils ». Recommandation :
    garder les 5 et présenter `read_file`, `list_files` et `write_file` comme le
    cœur.
-2. **Lenteur de Qwen3** : il « réfléchit » avant chaque réponse, et le client
+2. **Modèle par défaut du client** : `qwen3:4b` dans `demo_client.py` et le
+   README, alors que le modèle principal est `qwen3:8b`. Proposition :
+   passer le défaut à `qwen3:8b`.
+3. **Lenteur de Qwen3** : il « réfléchit » avant chaque réponse, et le client
    attend la réponse complète d'Ollama (`stream: False`), donc rien ne
    s'affiche pendant 30 à 60 s. Options : passer `think: false` dans la
    requête (plus rapide, peut-être moins fiable, à mesurer), ou afficher la
    réponse en streaming. Rien n'est décidé.
-3. *(Mineur)* En cas de refus, les outils renvoient un texte `Erreur ...` avec
+4. *(Mineur)* En cas de refus, les outils renvoient un texte `Erreur ...` avec
    `isError=false`, au lieu de lever une exception (`isError=true`). Les LLM le
    comprennent bien ; les tests acceptent les deux formes.
 
@@ -221,3 +233,35 @@ Node 24 (nécessaire pour `mcp dev server.py`, c'est-à-dire MCP Inspector).
   est à 100 % sur le GPU (bloc C).
 - Fin de session : branche poussée et fusionnée dans `master`. Prochaine
   étape : §0.
+
+### 26/10 — session 2 (matin) : B2 et B3
+- Comportement constaté **avant** correctif, en lançant le vrai client :
+  - Ollama injoignable : le message prévu (« Impossible de joindre
+    Ollama… ») était noyé dans un long traceback. La session MCP (anyio)
+    enveloppe l'erreur dans un `ExceptionGroup`, que
+    `except (OSError, RuntimeError)` ne capturait pas ;
+  - serveur MCP introuvable : traceback finissant par
+    `McpError: Connection closed` ;
+  - Ctrl+C à l'invite : **aucun effet**, même après Entrée.
+    `asyncio.run` remplace le gestionnaire de Ctrl+C par un autre qui
+    attend le prochain `await`, ce que `input()` ne fait jamais.
+- Correctifs dans `demo_client.py` :
+  - `root_error()` extrait l'erreur réelle du groupe. Message clair, code de
+    sortie 1. Serveur absent → « le serveur MCP s'est arrêté ou n'a pas pu
+    démarrer » ;
+  - `signal.signal(SIGINT, default_int_handler)` au début de `main()` ;
+  - Ollama est appelé directement, **sans `asyncio.to_thread`**. Sinon,
+    Ctrl+C devait attendre la fin de la réponse du modèle, car l'arrêt
+    d'asyncio attend les threads. Rien d'autre n'utilise la boucle pendant
+    ce temps ;
+  - `import readline` pour les flèches et l'historique.
+- Tests : `tests/test_client.py`, 13 tests, **29 au total**, environ 5 s.
+  Vérifié : avec l'ancien `demo_client.py`, les 5 tests de pannes et de
+  Ctrl+C échouent.
+- Vérification réelle avec `qwen3:8b` après correctif : « Quelle
+  installation a le plus d'équipements ? » → liste, lecture, bonne
+  réponse, 26 s.
+- Remarque : `sandbox/test1/toto.txt` a été modifié à 09:59 par un essai
+  manuel de l'utilisateur (ajout de « coucou » via `write_file`). Ce
+  changement n'est **pas** commité ; voir le bloc D pour le sort de ce
+  fichier.

@@ -38,6 +38,11 @@ Suivi détaillé, checklist et décisions en attente : [`SUIVI.md`](SUIVI.md).
   lecture sont affichés avec leurs arguments.
 - Validation des chemins et limites d'accès au niveau applicatif ; métadonnées
   d'audit enregistrées dans `sandbox/.mcp_audit.jsonl`.
+- Tests automatisés : `python -m unittest discover -s tests -v` (29 tests,
+  environ 5 s, sans Ollama). Ils couvrent le contrat du serveur, le
+  consentement (avec un faux Ollama aux réponses écrites à l'avance), les
+  entrées hostiles, le journal d'audit, les pannes (Ollama injoignable,
+  serveur absent) et Ctrl+C.
 - Vérification manuelle du client : découverte des cinq outils et appel réussi
   de `list_files`.
 
