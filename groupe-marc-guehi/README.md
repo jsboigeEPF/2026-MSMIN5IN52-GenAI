@@ -33,7 +33,10 @@ Décisions et justifications : [docs/DECISIONS.md](docs/DECISIONS.md). Architect
 
 Prérequis : Python 3.12, [uv](https://docs.astral.sh/uv/), Google Chrome (pour le test navigateur).
 
+Toutes les commandes se lancent depuis le dossier du projet :
+
 ```bash
+git clone https://github.com/jsboigeEPF/2026-MSMIN5IN52-GenAI.git && cd 2026-MSMIN5IN52-GenAI/groupe-marc-guehi
 uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[dev,analysis]"
 cp .env.example .env   # puis renseigner les clés (jamais commitées)
 ```
@@ -69,8 +72,9 @@ Un tour sans navigateur : `.venv/bin/python scripts/run_turn.py --text "Bonjour"
 ```bash
 .venv/bin/python -m pytest -q          # tests unitaires et d'intégration, sans réseau
 .venv/bin/ruff check src tests
-# Tests de bout en bout : démarrer d'abord un serveur sur le port 8765 (ajouter VOICE_DRY_RUN=1 pour ne rien payer)
-.venv/bin/uvicorn src.transport.app:app --port 8765
+# Tests de bout en bout : démarrer d'abord un serveur sur le port 8765, au choix
+VOICE_DRY_RUN=1 .venv/bin/uvicorn src.transport.app:app --port 8765   # faux fournisseurs, rien à payer
+.venv/bin/uvicorn src.transport.app:app --port 8765                   # vrais services (clés dans .env, payant)
 .venv/bin/python scripts/browser_smoke.py   # Chrome, micro simulé
 .venv/bin/python scripts/ws_barge_test.py data/audio/question1.wav data/audio/question2.wav   # interruption (même serveur)
 .venv/bin/python scripts/run_campaign.py all --dry-run   # plan, durée, coût
@@ -79,7 +83,7 @@ Un tour sans navigateur : `.venv/bin/python scripts/run_turn.py --text "Bonjour"
 .venv/bin/python scripts/run_campaign.py echosweep --out data/campaign/echo1 --stimuli data/campaign/<run>
 ```
 
-Les WAV de test (`data/audio/`, gitignoré, absent d'un clone neuf) sont à fournir : parole mono, voix de l'étudiant ou synthèse. Les phases de campagne synthétisent leurs propres stimuli.
+Les WAV de test (`data/audio/question1.wav`, `question2.wav`, gitignorés, absents d'un clone neuf) sont à fournir : parole mono, voix d'un membre du groupe ou synthèse. **Sans eux**, `browser_smoke.py` et `ws_barge_test.py` ne sont pas utilisables ; tout le reste marche : `pytest`, `ruff`, `run_turn.py --dry-run`, le serveur `VOICE_DRY_RUN=1` et `run_campaign.py all --dry-run`. Les phases de campagne synthétisent leurs propres stimuli.
 
 Analyse : `notebooks/analysis.ipynb` (`CAMPAIGN_RUN=data/campaign/<run>`). Protocole et définitions : [docs/METRICS.md](docs/METRICS.md). Résultats du run1 : [docs/DECISIONS.md](docs/DECISIONS.md) (entrée 11).
 
