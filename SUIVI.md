@@ -40,6 +40,21 @@ facultatives (= point 7).
 - Le rendu final doit se faire dans un fork du dépôt du cours, dans un dossier
   `groupe-<nom-court>/` (voir §4, bloc D). Pour l'instant, le travail se fait
   dans ce dépôt séparé.
+- **Sujet : B2 « Serveur MCP métier audité »** (`docs/CATALOGUE.md` du dépôt
+  du cours). MVP : 3 ressources, 3 outils dont une action réversible,
+  validation des entrées, journal d'audit. Réussite : tests des contrats,
+  appels non autorisés, entrées hostiles, consentement, erreurs de
+  transport. Plan B : client de test déterministe. Extensions : OAuth,
+  prompts MCP, Open WebUI.
+- **Soutenance : mercredi 28/10/2026, 13:15-17:00, salle A202.** Quatre
+  critères notés sur 10 : présentation, théorie, technique, organisation
+  (répartition, **historique Git**, documentation). Points valorisés
+  (`docs/EVALUATION.md`) : MVP fonctionnel, résultats mesurés,
+  **comparaison à une baseline simple**, analyse honnête des échecs, tests
+  reproductibles, contribution visible de chaque membre.
+- `AGENTS.md` du dépôt du cours : l'historique Git fait partie du livrable,
+  la contribution d'un agent de code doit être déclarée (`Co-Authored-By:`
+  ou une phrase dans le README), et on ne modifie que son dossier de groupe.
 
 ## 2. Commandes
 
@@ -121,20 +136,39 @@ Node 24 (nécessaire pour `mcp dev server.py`, c'est-à-dire MCP Inspector).
 - [ ] Reporter les résultats dans le README (section Résultats)
 
 ### Bloc D — Conformité du rendu (guide du cours)
+Plan prévu :
+1. Un membre forke `jsboigeEPF/2026-MSMIN5IN52-GenAI` sur GitHub (`gh` n'est
+   pas installé : passer par le site) et ajoute les autres comme
+   collaborateurs.
+2. Cloner le fork, ajouter le remote `upstream`, créer une branche.
+3. `git subtree add --prefix=groupe-<nom> <ce dépôt> master` : le projet
+   arrive dans le dossier **avec tout son historique**, commits de chaque
+   membre compris (critère « organisation »).
+4. Dans le dossier : `.gitignore` fusionné avec celui de
+   `template-groupe/`, `.env.example`, suppression d'`egg-info`, README
+   réécrit selon les sections de `template-groupe/README.md`.
+5. Vérifier : tests lancés depuis le dossier, diff limité au dossier, aucun
+   secret ni fichier lourd.
+6. Pousser, puis ouvrir la PR sur le site avec le texte préparé (modèle
+   `.github/PULL_REQUEST_TEMPLATE.md` : dossier, sujet B2, membres en
+   `@pseudo`, résumé, 10 cases à cocher, démonstration et plan B).
 - [ ] Fork de `jsboigeEPF/2026-MSMIN5IN52-GenAI`, branche de travail, un seul dossier `groupe-<nom-court>/`
 - [ ] README : membres (pseudos GitHub uniquement), architecture, tests, résultats, limites, répartition du travail, licences et références
 - [ ] Remplacer la section « À faire » du README par l'état final
 - [ ] `.env.example` (le projet n'utilise pas de variables d'environnement : le dire dans le fichier)
 - [ ] Retirer `sandbox_filesystem_mcp.egg-info/` du dépôt et l'ajouter au `.gitignore`
 - [ ] Décider du sort de `sandbox/test1/toto.txt` et du contenu de test de `sandbox/README.txt`
+- [ ] Déclarer dans le README l'usage d'agents de code (exigé par `AGENTS.md` du cours)
+- [ ] Limites à citer : `os.pread` (mode append) n'existe pas sous Windows, donc le serveur est prévu pour Linux/macOS
 - [ ] Slides (PDF), éventuellement dans une PR complémentaire
 - [ ] Ouvrir la PR et remplir sa checklist
 
 ## 5. Décisions en attente (à faire trancher par l'utilisateur)
 
-1. **3 ou 5 outils ?** Le sujet parle de « trois outils ». Recommandation :
-   garder les 5 et présenter `read_file`, `list_files` et `write_file` comme le
-   cœur.
+1. **3 ou 5 outils ?** La fiche B2 demande « trois outils dont une action
+   réversible » comme **minimum** : les 5 outils le dépassent, et `move_file`
+   est l'action réversible. Recommandation : garder les 5, sauf avis contraire
+   de l'utilisateur.
 2. **Modèle par défaut du client** : `qwen3:4b` dans `demo_client.py` et le
    README, alors que le modèle principal est `qwen3:8b`. Proposition :
    passer le défaut à `qwen3:8b`.
