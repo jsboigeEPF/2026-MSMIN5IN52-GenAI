@@ -153,22 +153,19 @@ Plan prévu :
    `.github/PULL_REQUEST_TEMPLATE.md` : dossier, sujet B2, membres en
    `@pseudo`, résumé, 10 cases à cocher, démonstration et plan B).
 - [ ] Fork de `jsboigeEPF/2026-MSMIN5IN52-GenAI`, branche de travail, un seul dossier `groupe-<nom-court>/`
-- [ ] README : membres (pseudos GitHub uniquement), architecture, tests, résultats, limites, répartition du travail, licences et références
-- [ ] Remplacer la section « À faire » du README par l'état final
-- [ ] `.env.example` (le projet n'utilise pas de variables d'environnement : le dire dans le fichier)
-- [ ] Retirer `sandbox_filesystem_mcp.egg-info/` du dépôt et l'ajouter au `.gitignore`
-- [ ] Décider du sort de `sandbox/test1/toto.txt` et du contenu de test de `sandbox/README.txt`
-- [ ] Déclarer dans le README l'usage d'agents de code (exigé par `AGENTS.md` du cours)
-- [ ] Limites à citer : `os.pread` (mode append) n'existe pas sous Windows, donc le serveur est prévu pour Linux/macOS
+- [x] README réécrit selon `template-groupe/README.md` : groupe, sujet B2, architecture, installation, utilisation, tests, résultats (baseline et versions successives, échecs compris), limites et plan B, répartition, agents, licences et références
+- [x] Section « À faire » du README supprimée (le suivi est ici)
+- [x] `.env.example` (aucune variable, expliqué en commentaire), `requirements.txt` (versions exactes)
+- [x] `egg-info` retiré du suivi, `.gitignore` fusionné avec celui du modèle
+- [x] Sandbox : `test1/toto.txt` supprimé, `README.txt` présente le sandbox
+- [x] Usage d'agents de code déclaré dans le README (Codex et Claude Code)
+- [x] Limite Windows (`os.pread`) citée dans le README
 - [ ] Slides (PDF), éventuellement dans une PR complémentaire
 - [ ] Ouvrir la PR et remplir sa checklist
 
 ## 5. Décisions en attente (à faire trancher par l'utilisateur)
 
-1. **3 ou 5 outils ?** La fiche B2 demande « trois outils dont une action
-   réversible » comme **minimum** : les 5 outils le dépassent, et `move_file`
-   est l'action réversible. Recommandation : garder les 5, sauf avis contraire
-   de l'utilisateur.
+1. ~~3 ou 5 outils~~ : on garde les 5 (la fiche B2 fixe un minimum de 3).
 2. **Modèle par défaut du client** : `qwen3:4b` dans `demo_client.py` et le
    README, alors que le modèle principal est `qwen3:8b`. Proposition :
    passer le défaut à `qwen3:8b`.
@@ -267,6 +264,18 @@ Plan prévu :
   est à 100 % sur le GPU (bloc C).
 - Fin de session : branche poussée et fusionnée dans `master`. Prochaine
   étape : §0.
+
+### 26/10 — session 2 (matin) : bloc D, préparation
+- Décisions de l'utilisateur : dossier **`groupe-mcp-audit`** ; **2 membres**
+  (`@remiLesanne`, `@GabrielC-star`), donc +1 point d'ajustement ; agents
+  utilisés : **Codex** et **Claude Code** ; `SUIVI.md` gardé dans le rendu ;
+  **après la PR, on travaille directement dans le fork**. Le fork sera créé
+  par `remiLesanne` sur le site GitHub.
+- Répartition dans le README déduite de l'historique Git (premiers commits
+  de @GabrielC-star : serveur, données, client, README ; ensuite @remiLesanne : audit,
+  tests, correctifs, mesures). **À faire valider par le groupe.**
+- Préparé dans ce dépôt avant l'import (`git subtree`) : nettoyage,
+  `.gitignore`, `.env.example`, `requirements.txt`, sandbox, README.
 
 ### 26/10 — session 2 (matin) : B2 et B3
 - Comportement constaté **avant** correctif, en lançant le vrai client :
