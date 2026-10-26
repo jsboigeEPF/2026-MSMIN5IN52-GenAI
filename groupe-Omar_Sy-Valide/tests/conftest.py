@@ -22,6 +22,12 @@ StateFactory = Callable[..., AgentProcessState]
 RunnerFactory = Callable[..., ProcessRunner]
 
 
+@pytest.fixture(autouse=True)
+def no_project_env_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Settings read the project's `.env` from any cwd; tests must never see the real key or models."""
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+
+
 @pytest.fixture
 def clock() -> FakeClock:
     return FakeClock(T0)

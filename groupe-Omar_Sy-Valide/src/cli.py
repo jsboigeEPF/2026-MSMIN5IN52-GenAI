@@ -1,8 +1,10 @@
-"""Command-line interface: start, status, decide, resume, sweep, report (plus runs and credits).
+"""Command-line interface: start, status, decide, resume, undo, sweep, report (plus runs and credits).
 
-    python -m src.cli start --mock-llm --mock-script script.json --repo ../demo --file calc.py --prompt "..."
+The interactive agent is `python omar.py`; this CLI drives the same engine one command at a time.
+
+    python -m src.cli start --mock-llm --mock-script script.json --repo ../demo --prompt "..."
     python -m src.cli status <run_id>
-    python -m src.cli decide <run_id> --action approve --actor alice
+    python -m src.cli decide <run_id> --action approve --actor alice   # acts on the pending gate
 
 `--mock-llm` uses the scripted fake LLM (zero network).
 Without it, the OpenRouter models configured in `.env` are used.
@@ -19,13 +21,15 @@ from typing import Annotated, Any, Literal, TypeVar
 import httpx2
 import typer
 
-from src.config import Settings
+from src.config import DEFAULT_DB, Settings
 from src.llm.client import LLMProviderError
 from src.llm.fake import FakeScriptExhaustedError
 from src.models.state import AgentProcessState
 from src.observability.telemetry import generate_evaluation_report
 from src.process.engine import DecisionRefusedError, DecisionRequest, ProcessRunner, StartRequest
+from src.process.steps import HumanApprovalStep
 from src.runtime import open_runner
+from src.safe_text import printable
 from src.tools.git_ops import GitError
 from src.tools.sandbox import SandboxUnavailableError
 
@@ -35,7 +39,6 @@ Db = Annotated[Path, typer.Option("--db", help="SQLite database holding runs, jo
 Mock = Annotated[bool, typer.Option("--mock-llm", help="Use the scripted fake LLM (no network).")]
 Script = Annotated[Path | None, typer.Option("--mock-script", help="JSON script for --mock-llm.")]
 Trace = Annotated[bool, typer.Option("--trace", help="Print OpenTelemetry spans to the console.")]
-DEFAULT_DB = Path("mini-opencode.db")
 T = TypeVar("T")
 
 
@@ -77,20 +80,32 @@ async def _describe(runner: ProcessRunner, state: AgentProcessState) -> str:
     lines = [
         f"run {state.run_id}  [{state.status.value}]  step={state.current_step}",
         f"scenario: {state.scenario or '-'}",
-        f"target: {state.target_repo_path} :: {state.target_file} (base {state.base_branch})",
+        f"target: {state.target_repo_path} :: {state.target_file or '(planner picks)'}",
         f"iterations: loop {state.loop_iteration}, fix {state.fix_iteration}, "
         f"revision {state.revision_iteration}",
         f"cost so far: ${cost:.6f} ({settings.usd_to_eur(cost):.6f} EUR)",
     ]
-    if state.approval_deadline is not None and state.status.value == "AWAITING_APPROVAL":
-        lines.append(f"approval deadline: {state.approval_deadline.isoformat()}")
+    gate = HumanApprovalStep.gate(state)
+    if gate is not None:
+        lines.append(f"awaiting the {gate} gate: approve, revise (with a comment) or reject")
+        if HumanApprovalStep.write_anyway_allowed(state, runner.limits):
+            lines.append(
+                f"WARNING: tests still fail after {runner.limits.max_fix} automatic fixes: revise, reject, "
+                "or --action write_anyway to write this failing code as is"
+            )
+        if state.approval_deadline is not None:
+            lines.append(f"approval deadline: {state.approval_deadline.isoformat()}")
     if state.execution_plan:
         lines.append("plan:")
         lines += [f"  {i}. {step}" for i, step in enumerate(state.execution_plan, 1)]
     if state.verification is not None:
         v = state.verification
         verdict = {True: "PASSED", False: "FAILED"}
-        lines.append(f"verification: pytest {verdict[v.pytest_passed]}, ruff {verdict[v.linter_passed]}")
+        tests, lint = (
+            f"{v.tests_label} {verdict[v.pytest_passed]}",
+            f"{v.lint_label} {verdict[v.linter_passed]}",
+        )
+        lines.append(f"verification: {tests}, {lint}")
         if v.error_summary:
             lines.append("  summary: " + v.error_summary.replace("\n", "\n  "))
     if state.unified_diff:
@@ -104,15 +119,19 @@ async def _describe(runner: ProcessRunner, state: AgentProcessState) -> str:
         )
     if state.error_message:
         lines.append(f"error: {state.error_message}")
-    return "\n".join(lines)
+    return printable("\n".join(lines))  # LLM and repository text: no raw control character on the terminal
 
 
 @app.command()
 def start(
-    repo: Annotated[Path, typer.Option(help="Target git repository (its base branch must be checked out).")],
-    file: Annotated[str, typer.Option(help="File to change, relative to the repository root.")],
+    repo: Annotated[
+        Path, typer.Option(help="Target git repository (the file is written in its working tree).")
+    ],
     prompt: Annotated[str, typer.Option(help="What the agent should do.")],
-    base: Annotated[str, typer.Option(help="Base branch.")] = "main",
+    file: Annotated[
+        str | None, typer.Option(help="File to change, relative to the repository root (default: AI picks).")
+    ] = None,
+    base: Annotated[str | None, typer.Option(help="Branch to start from (default: checked out).")] = None,
     scenario: Annotated[str | None, typer.Option(help="Label used by the evaluation report.")] = None,
     run_id: Annotated[str | None, typer.Option(help="Run id (default: random).")] = None,
     db: Db = DEFAULT_DB,
@@ -120,7 +139,7 @@ def start(
     mock_script: Script = None,
     trace: Trace = False,
 ) -> None:
-    """Start a run: plan, code and verify, then stop at human approval."""
+    """Start a run: plan, then stop at the plan gate."""
     new_id = run_id or uuid.uuid4().hex[:12]
 
     async def go() -> str:
@@ -154,7 +173,10 @@ def status(run_id: str, db: Db = DEFAULT_DB) -> None:
 @app.command()
 def decide(
     run_id: str,
-    action: Annotated[Literal["approve", "revise", "reject"], typer.Option(help="The decision.")],
+    action: Annotated[
+        Literal["approve", "revise", "reject", "write_anyway"],
+        typer.Option(help="The decision (write_anyway: only once the automatic fixes ran out)."),
+    ],
     actor: Annotated[str, typer.Option(help="Who decides (stored in the audit log).")],
     comment: Annotated[str | None, typer.Option(help="Required for revise.")] = None,
     db: Db = DEFAULT_DB,
@@ -162,7 +184,7 @@ def decide(
     mock_script: Script = None,
     trace: Trace = False,
 ) -> None:
-    """Record a human decision and continue the run."""
+    """Record a human decision on the pending gate (plan or write) and continue the run."""
 
     async def go() -> str:
         opened = open_runner(db, drive=True, mock=mock_llm, script=mock_script, trace_console=trace)
@@ -189,6 +211,18 @@ def resume(
             return await _describe(runner, await runner.resume(run_id))
 
     typer.echo(_run(go(), run_id))
+
+
+@app.command()
+def undo(run_id: str, db: Db = DEFAULT_DB) -> None:
+    """Restore the file a completed run wrote (refused if it was modified since)."""
+
+    async def go() -> str:
+        async with open_runner(db, drive=False) as runner:
+            state = await runner.undo(run_id)
+            return f"restored {state.target_file} in {state.target_repo_path}"
+
+    typer.echo(_run(go()))
 
 
 @app.command()

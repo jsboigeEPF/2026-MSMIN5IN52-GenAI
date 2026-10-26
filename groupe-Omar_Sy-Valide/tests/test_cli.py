@@ -32,19 +32,29 @@ def test_mock_run_end_to_end_through_the_cli(git_repo: Path, tmp_path: Path) -> 
     script = tmp_path / "script.json"
     script.write_text(
         json.dumps(
-            {"planner": [{"steps": ["fix add"]}], "coder": [{"new_content": FIXED_CALC, "rationale": "r"}]}
+            {
+                "planner": [{"target_file": "calc.py", "steps": ["fix add"]}],
+                "coder": [{"new_content": FIXED_CALC, "rationale": "r"}],
+            }
         )
     )
     db = tmp_path / "cli.db"
 
     out = invoke(
         "start", "--db", db, "--mock-llm", "--mock-script", script,
-        "--repo", git_repo, "--file", "calc.py", "--prompt", "Fix add()", "--run-id", "cli-1",
+        "--repo", git_repo, "--prompt", "Fix add()", "--run-id", "cli-1",
     )  # fmt: skip
-    assert "AWAITING_APPROVAL" in out and "+    return a + b" in out and "1. fix add" in out
+    assert "AWAITING_APPROVAL" in out and "plan gate" in out and "1. fix add" in out
+    assert ":: calc.py" in out  # chosen by the (fake) planner
+
+    out = invoke(
+        "decide", "cli-1", "--db", db, "--mock-llm", "--mock-script", script,
+        "--action", "approve", "--actor", "alice",
+    )  # fmt: skip
+    assert "write gate" in out and "+    return a + b" in out
 
     out = invoke("status", "cli-1", "--db", db)
-    assert "pytest PASSED" in out and "ruff PASSED" in out and "cost so far" in out
+    assert "write gate" in out and "cost so far" in out
 
     refused = cli.invoke(
         app, ["decide", "cli-1", "--db", str(db), "--mock-llm", "--action", "revise", "--actor", "a"]
@@ -52,8 +62,11 @@ def test_mock_run_end_to_end_through_the_cli(git_repo: Path, tmp_path: Path) -> 
     assert refused.exit_code == 1 and "comment" in refused.output
 
     out = invoke("decide", "cli-1", "--db", db, "--mock-llm", "--action", "approve", "--actor", "alice")
-    assert "COMPLETED" in out
+    assert "COMPLETED" in out and "pytest PASSED" in out
     assert (git_repo / "calc.py").read_text() == FIXED_CALC
+
+    assert "restored calc.py" in invoke("undo", "cli-1", "--db", db)
+    assert (git_repo / "calc.py").read_text() != FIXED_CALC
 
     assert "cli-1" in invoke("runs", "--db", db)
     assert json.loads(invoke("report", "--db", db))["runs"] == 1

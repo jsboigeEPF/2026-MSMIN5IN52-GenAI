@@ -2,7 +2,7 @@
 
 import math
 from collections import defaultdict
-from collections.abc import Generator, Sequence
+from collections.abc import Collection, Generator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -31,6 +31,7 @@ LLM_TOKENS_COMPLETION = "llm.tokens.completion"
 LLM_COST_USD = "llm.cost_usd"
 VERIFICATION_PYTEST_PASSED = "verification.pytest_passed"
 VERIFICATION_LINTER_PASSED = "verification.linter_passed"
+APPROVAL_GATE = "approval.gate"
 APPROVAL_ACTION = "approval.action"
 APPROVAL_ACTOR = "approval.actor"
 
@@ -78,6 +79,7 @@ def record_verification(span: Span, result: VerificationResult) -> None:
 
 
 def record_approval(span: Span, decision: ApprovalDecision) -> None:
+    span.set_attribute(APPROVAL_GATE, decision.gate)
     span.set_attribute(APPROVAL_ACTION, decision.action)
     span.set_attribute(APPROVAL_ACTOR, decision.actor)
 
@@ -150,7 +152,7 @@ async def generate_evaluation_report(
     *,
     usd_eur_rate: float | None = None,
     budget_eur: float | None = None,
-    approval_step: str = "approval",
+    approval_steps: Collection[str] = ("plan_approval", "write_approval"),
 ) -> EvaluationReport:
     """Completion rate per scenario, compute time per step/model (mean, P95), human wait time,
     average fix/revision iterations, tokens and cost against the budget. Runs without a scenario
@@ -167,7 +169,8 @@ async def generate_evaluation_report(
     completion: dict[str, ScenarioCompletion] = {}
     for scenario in sorted({r.scenario or "unlabeled" for r in runs}):
         group = [r for r in runs if (r.scenario or "unlabeled") == scenario]
-        done = sum(r.status is ProcessStatus.COMPLETED for r in group)
+        # "written_despite_failing_tests" is COMPLETED but not a success.
+        done = sum(r.status is ProcessStatus.COMPLETED and r.terminal_reason is None for r in group)
         completion[scenario] = ScenarioCompletion(runs=len(group), completed=done, rate=done / len(group))
 
     by_step: defaultdict[str, list[float]] = defaultdict(list)
@@ -177,7 +180,7 @@ async def generate_evaluation_report(
         by_step[m.step_name].append(m.compute_ms)
         if m.model_id:
             by_model[m.model_id].append(m.compute_ms)
-        if m.step_name == approval_step:
+        if m.step_name in approval_steps:
             waits.append(m.wait_ms)
 
     cost_usd = sum(m.cost_usd for m in metrics)

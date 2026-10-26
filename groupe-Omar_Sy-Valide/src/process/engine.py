@@ -7,6 +7,9 @@ next step to run, so `resume` after a crash re-runs exactly the step that did no
 
 Known failures (budget, invalid LLM output, unavailable sandbox) end the run as FAILED with compensation.
 Any other exception is a crash: it propagates and leaves the run resumable.
+
+The run suspends on each human gate (`graph.GATES`): `start`, `decide` and `resume` return once the run
+waits for a human or has ended. `on_event` lets an interactive front end follow every journal entry live.
 """
 
 import time
@@ -22,7 +25,14 @@ from pydantic import BaseModel, Field
 
 from src.clock import Clock
 from src.config import Settings
-from src.llm.client import BudgetExceededError, LLMClient, LLMError, LLMUsage, StructuredOutputError
+from src.llm.client import (
+    BudgetExceededError,
+    LLMClient,
+    LLMError,
+    LLMUsage,
+    StructuredOutputError,
+    TokenStream,
+)
 from src.models.state import (
     TERMINAL_STATUSES,
     AgentProcessState,
@@ -38,7 +48,16 @@ from src.observability.telemetry import (
     step_span,
 )
 from src.process.compensation import CompensationHandler
-from src.process.graph import STEP_STATUS, Event, Limits, Step, Terminal, Transition, failure, next_transition
+from src.process.graph import (
+    GATES,
+    STEP_STATUS,
+    Event,
+    Step,
+    Terminal,
+    Transition,
+    failure,
+    next_transition,
+)
 from src.process.steps import (
     CodeGenerationStep,
     DecisionRefusedError,
@@ -49,21 +68,25 @@ from src.process.steps import (
     StepContext,
     StepHandler,
     VerificationStep,
+    undo_write,
 )
 from src.storage.sqlite_store import SqliteStore
-from src.tools.git_ops import GitOps
+from src.tools.git_ops import run_git
 from src.tools.sandbox import SandboxRunner, SandboxUnavailableError
 from src.tools.workspace import WorkspaceManager
 
-__all__ = ["DecisionRefusedError", "DecisionRequest", "ProcessRunner", "StartRequest"]
+__all__ = ["DecisionRefusedError", "DecisionRequest", "EventHook", "ProcessRunner", "StartRequest"]
 
 END = "end"
+
+# (state after the event, step, event_type, payload): called after each journal entry is persisted.
+EventHook = Callable[[AgentProcessState, str, str, dict[str, Any]], None]
 
 
 class StartRequest(BaseModel):
     target_repo_path: str
-    base_branch: str = "main"
-    target_file: str
+    base_branch: str | None = None  # None: the branch checked out in the repository
+    target_file: str | None = None  # None: the planner chooses it
     user_prompt: str = Field(min_length=1)
     scenario: str | None = None
     run_id: str | None = None
@@ -90,14 +113,18 @@ class ProcessRunner:
         clock: Clock,
         tracer: Tracer | None = None,
         fault_hook: Callable[[str], None] | None = None,
+        on_event: EventHook | None = None,
+        stream: TokenStream | None = None,
     ) -> None:
         self.store = store
+        self.on_event = on_event
         self.clock = clock
         self.tracer = tracer or trace.get_tracer(__name__)
-        self.limits = Limits(max_fix=settings.MAX_FIX, max_revisions=settings.MAX_REVISIONS)
+        self.limits = settings.limits()
         self.ctx = StepContext(llm=llm, sandbox=sandbox, settings=settings, clock=clock)
         if fault_hook is not None:
             self.ctx.fault_hook = fault_hook
+        self.ctx.stream = stream
         self.handlers: dict[Step, StepHandler] = {
             Step.PLAN: PlanStep(),
             Step.CODE: CodeGenerationStep(),
@@ -105,14 +132,18 @@ class ProcessRunner:
             Step.FINALIZE: FinalizationStep(),
         }
         self.approval = HumanApprovalStep()
-        self.compensation = CompensationHandler(GitOps(), clock)
+        self.compensation = CompensationHandler(clock)
 
     # --- public interface (SPEC §5.2) --------------------------------------------------------------------
 
     async def start(self, request: StartRequest) -> str:
         run_id = request.run_id or uuid.uuid4().hex[:12]
         repo = Path(request.target_repo_path).resolve()
-        WorkspaceManager(repo, request.base_branch).worktree_path(run_id)  # rejects unsafe run ids early
+        base = run_git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+        if request.base_branch is not None and request.base_branch != base:
+            # The file is tested on, and written into, the checked-out tree: no other branch makes sense.
+            raise ValueError(f"check out '{request.base_branch}' in {repo} first (found '{base}')")
+        WorkspaceManager(repo, base).worktree_path(run_id)  # rejects unsafe run ids early
         if await self.store.load_state(run_id) is not None:
             raise ValueError(f"run {run_id} already exists")
         state = AgentProcessState(
@@ -120,8 +151,9 @@ class ProcessRunner:
             scenario=request.scenario,
             current_step=Step.PLAN,
             target_repo_path=str(repo),
-            base_branch=request.base_branch,
+            base_branch=base,
             target_file=request.target_file,
+            file_locked=request.target_file is not None,
             user_prompt=request.user_prompt,
         )
         await self._save(state)
@@ -149,8 +181,10 @@ class ProcessRunner:
         await self.sweep_expired()
         state = await self._load(run_id)
         now = self.clock.now()
-        self.approval.validate(state, request, now)
+        gate = self.approval.validate(state, request, now, self.limits)
+        step = Step(state.current_step)
         decision = ApprovalDecision(
+            gate=gate,
             action=request.action,
             actor=request.actor,
             comment=request.comment,
@@ -159,10 +193,19 @@ class ProcessRunner:
         )
         await self.store.append_approval(run_id, decision)
         with run_span(self.tracer, run_id):
-            event = self.approval.apply(state, decision)
-            await self._close_approval(state, event, decision, now)
-            if await self._follow(state, Step.APPROVAL, event, state.loop_iteration):
+            event = self.approval.apply(state, decision, self.limits)
+            await self._close_approval(state, step, decision, now)
+            if await self._follow(state, step, event, state.loop_iteration):
                 await self._drive(state)
+        return state
+
+    async def undo(self, run_id: str) -> AgentProcessState:
+        """Restore the file a completed run wrote, if nobody changed it since."""
+        state = await self._load(run_id)
+        target = undo_write(state, self.ctx.patch)
+        state.undone = True
+        await self._save(state)
+        await self._event(state, END, "undone", state.loop_iteration, {"target_file": target})
         return state
 
     async def sweep_expired(self) -> list[str]:
@@ -170,11 +213,13 @@ class ProcessRunner:
         now = self.clock.now()
         expired: list[str] = []
         for state in await self.store.list_runs(status=ProcessStatus.AWAITING_APPROVAL):
-            if state.approval_deadline is None or now < state.approval_deadline:
-                continue
+            gate = next((s for s in GATES if s.value == state.current_step), None)
+            if gate is None or state.approval_deadline is None or now < state.approval_deadline:
+                continue  # not overdue, or a run from an older graph version
+            step = gate
             with run_span(self.tracer, state.run_id):
-                await self._close_approval(state, Event.EXPIRED, None, now)
-                await self._follow(state, Step.APPROVAL, Event.EXPIRED, state.loop_iteration)
+                await self._close_approval(state, step, None, now)
+                await self._follow(state, step, Event.EXPIRED, state.loop_iteration)
             expired.append(state.run_id)
         return expired
 
@@ -183,8 +228,8 @@ class ProcessRunner:
     async def _drive(self, state: AgentProcessState) -> None:
         while True:
             step = Step(state.current_step)
-            if step is Step.APPROVAL:
-                await self._suspend(state)
+            if step in GATES:
+                await self._suspend(state, step)
                 return
             if not await self._execute(state, step):
                 return
@@ -227,32 +272,33 @@ class ProcessRunner:
         if transition.loop:
             state.loop_iteration += 1
         state.current_step = target
-        if target is not Step.APPROVAL:  # AWAITING_APPROVAL is only set once the deadline is persisted
+        if target not in GATES:  # AWAITING_APPROVAL is only set once the deadline is persisted
             state.status = STEP_STATUS[target]
         await self._save(state)
         await self._event(state, step, "step_completed", iteration, {"event": event, "next": target})
         return True
 
-    async def _suspend(self, state: AgentProcessState) -> None:
-        await self._event(state, Step.APPROVAL, "step_started", state.loop_iteration)
+    async def _suspend(self, state: AgentProcessState, step: Step) -> None:
+        await self._event(state, step, "step_started", state.loop_iteration)
         self.approval.suspend(state, self.ctx)
         await self._save(state)
         deadline = state.approval_deadline.isoformat() if state.approval_deadline else None
-        await self._event(state, Step.APPROVAL, "suspended", state.loop_iteration, {"deadline": deadline})
+        payload = {"gate": GATES[step], "deadline": deadline}
+        await self._event(state, step, "suspended", state.loop_iteration, payload)
 
     async def _close_approval(
-        self, state: AgentProcessState, event: Event, decision: ApprovalDecision | None, now: datetime
+        self, state: AgentProcessState, step: Step, decision: ApprovalDecision | None, now: datetime
     ) -> None:
         since = state.awaiting_since or now
         metrics = StepMetrics(
-            step_name=Step.APPROVAL,
+            step_name=step,
             iteration=state.loop_iteration,
             started_at=since,
             ended_at=now,
             wait_ms=(now - since).total_seconds() * 1000,
             status=decision.action if decision else "expired",
         )
-        with step_span(self.tracer, state.run_id, Step.APPROVAL, state.loop_iteration) as span:
+        with step_span(self.tracer, state.run_id, step, state.loop_iteration) as span:
             record_step_metrics(span, metrics)
             if decision is not None:
                 record_approval(span, decision)
@@ -314,3 +360,5 @@ class ProcessRunner:
         payload: dict[str, Any] | None = None,
     ) -> None:
         await self.store.append_event(state.run_id, self.clock.now(), step, iteration, event_type, payload)
+        if self.on_event is not None:
+            self.on_event(state, step, event_type, payload or {})

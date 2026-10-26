@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from typing import Any
 
 import httpx2
@@ -23,7 +24,7 @@ from src.llm.fake import FakeLLM, FakeScriptExhaustedError
 from src.models.state import CodePatch, ErrorSummary, PlanOutput
 from src.storage.sqlite_store import SqliteStore
 
-PLAN = PlanOutput(steps=["read calc.py", "fix add"])
+PLAN = PlanOutput(target_file="calc.py", steps=["read calc.py", "fix add"])
 PATCH = CodePatch(new_content="x = 1\n", rationale="r")
 
 
@@ -97,13 +98,13 @@ async def test_structured_call_parses_output_and_reports_usage(
 async def test_same_key_is_replayed_from_cache_without_calling_the_llm(
     store: SqliteStore, exporter: InMemorySpanExporter
 ) -> None:
-    fake = FakeLLM({"planner": [PLAN, PlanOutput(steps=["other"])]})
+    fake = FakeLLM({"planner": [PLAN, PlanOutput(target_file="calc.py", steps=["other"])]})
     client = make_client(fake, store, exporter)
     await call(client)
     replay = await call(make_client(fake, store, exporter))  # fresh client, same store: crash recovery
     assert replay.cached and replay.output == PLAN
     assert fake.calls["planner"] == 1
-    assert (await call(client, iteration=1)).output == PlanOutput(steps=["other"])
+    assert (await call(client, iteration=1)).output == PlanOutput(target_file="calc.py", steps=["other"])
     assert fake.calls["planner"] == 2
 
 
@@ -236,3 +237,72 @@ async def test_provider_errors_become_a_short_resumable_error() -> None:
     text = str(err.value)
     assert "planner" in text and "vendor/planner" in text and "HTTP 404" in text and "guardrail" in text
     assert "\n" not in text
+
+
+class Collector:
+    def __init__(self) -> None:
+        self.starts: list[str] = []
+        self.tokens: list[str] = []
+        self.reasoning: list[str] = []
+
+    def start(self, service_id: str) -> None:
+        self.starts.append(service_id)
+
+    def token(self, text: str, reasoning: bool = False) -> None:
+        (self.reasoning if reasoning else self.tokens).append(text)
+
+
+def sse(*chunks: dict[str, object]) -> bytes:
+    return b"".join(b"data: " + json.dumps(c).encode() + b"\n\n" for c in chunks) + b"data: [DONE]\n\n"
+
+
+async def test_openrouter_backend_streams_tokens_reasoning_and_cost() -> None:
+    content = PLAN.model_dump_json()
+    base = {"id": "gen-2", "object": "chat.completion.chunk", "created": 0, "model": "vendor/planner"}
+
+    def choice(**delta: object) -> dict[str, object]:
+        return {**base, "choices": [{"index": 0, "delta": delta, "finish_reason": None}]}
+
+    body = sse(
+        choice(role="assistant", content="", reasoning="Thinking about calc.py"),
+        choice(content=content[:10]),
+        choice(content=content[10:]),
+        {**base, "choices": [], "usage": {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16,
+                                          "cost": 0.0005}},
+    )  # fmt: skip
+    captured: list[httpx2.Request] = []
+
+    def handler(req: httpx2.Request) -> httpx2.Response:
+        captured.append(req)
+        return httpx2.Response(200, content=body, headers={"content-type": "text/event-stream"})
+
+    http = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
+    backend = OpenRouterBackend(build_kernel(settings(**LIVE), http_client=http))
+    stream = Collector()
+    response = await backend.complete(replace(request(), stream=stream))
+
+    assert json.loads(captured[0].content)["stream"] is True
+    assert "".join(stream.tokens) == content and len(stream.tokens) == 2
+    assert stream.reasoning == ["Thinking about calc.py"]
+    assert PlanOutput.model_validate_json(response.content) == PLAN
+    assert response.usage == LLMUsage(
+        prompt_tokens=12, completion_tokens=4, cost_usd=0.0005, model_id="vendor/planner"
+    )
+
+
+async def test_structured_calls_stream_each_attempt_but_not_cache_hits(store: SqliteStore) -> None:
+    fake = FakeLLM({"planner": ["not json", PLAN]})
+    client = LLMClient(Kernel(), fake, store, settings())
+    stream = Collector()
+    await client.structured(
+        run_id="r", step="plan", iteration=0, service_id="planner", system="s", user="u",
+        output_type=PlanOutput, stream=stream,
+    )  # fmt: skip
+    assert stream.starts == ["planner", "planner"]  # the retry starts a fresh reply on screen
+    assert "".join(stream.tokens) == "not json" + PLAN.model_dump_json()
+    cached = Collector()
+    await client.structured(
+        run_id="r", step="plan", iteration=0, service_id="planner", system="s", user="u",
+        output_type=PlanOutput, stream=cached,
+    )  # fmt: skip
+    assert cached.starts == [] and cached.tokens == []

@@ -88,9 +88,11 @@ class CodePatch(BaseModel):          # structured LLM output of Step 2
     rationale: str
 
 class PlanOutput(BaseModel):         # structured LLM output of Step 1
+    target_file: str                 # the one file to change, chosen by the planner
     steps: list[str]
 
 class ApprovalDecision(BaseModel):   # append-only audit record
+    gate: Literal["plan", "write"]
     action: Literal["approve", "revise", "reject"]
     actor: str
     comment: Optional[str] = None
@@ -98,7 +100,7 @@ class ApprovalDecision(BaseModel):   # append-only audit record
     iteration: int
 
 class CompensationRecord(BaseModel):
-    action: Literal["discard_worktree", "git_revert"]
+    action: Literal["discard_worktree"]
     done: bool
     detail: Optional[str] = None
     at: datetime
@@ -107,14 +109,15 @@ class AgentProcessState(BaseModel):
     run_id: str
     status: ProcessStatus = ProcessStatus.INITIALIZED
     terminal_reason: Optional[str] = None   # e.g. "human_rejected", "approval_expired",
-                                            # "commit_failed", "post_commit_check_failed",
+                                            # "write_failed", "fixes_exhausted",
                                             # "budget_exceeded", "max_iterations"
     current_step: str = "init"
     target_repo_path: str
     base_branch: str
     worktree_path: Optional[str] = None
     run_branch: Optional[str] = None
-    target_file: str
+    target_file: Optional[str] = None   # chosen by the planner unless given by the user
+    file_locked: bool = False           # True when the user gave the target file
     user_prompt: str
     original_file_content: Optional[str] = None
     execution_plan: Optional[list[str]] = None
@@ -125,7 +128,7 @@ class AgentProcessState(BaseModel):
     fix_iteration: int = 0          # loops triggered by failed verification
     human_feedback: Optional[str] = None
     approval_deadline: Optional[datetime] = None
-    git_commit_hash: Optional[str] = None
+    undone: bool = False                # the written file was restored (`undo`)
     compensation: Optional[CompensationRecord] = None
     metrics: list[StepMetrics] = Field(default_factory=list)
     error_message: Optional[str] = None
@@ -144,16 +147,16 @@ Plain Python classes, unit-tested, **called by step code only** (no LLM tool cal
    - `read_file(path) -> str`
    - `inspect_ast(path) -> str`: classes, signatures and docstrings via `ast`, to keep prompts small.
 3. **`PatchEngine`** (`patch.py`)
-   - `apply(worktree_path, file, new_content) -> unified_diff`: writes into the worktree only, returns `difflib.unified_diff`.
-4. **`SandboxRunner`** (`sandbox.py`)
+   - `diff(file, old, new) -> unified_diff`: pure, shown at the write gate before anything is written.
+   - `apply(root, file, new_content)`: writes under `root` (the run worktree, then, once approved and verified, the user's working tree). `resolve` refuses absolute paths, `..` escapes and `.git/` / `.mini-opencode/`.
+4. **`plan_checks`** (`checks.py`): the tests and linter for the target file, from the project around it: pytest + ruff for `.py`; the nearest `package.json`'s `test` / `lint` npm scripts (its `node_modules` shared with the worktree); `go test` / `go vet`; `cargo test`; nothing (said explicitly) otherwise. A `.omar.toml` (`[checks] cwd/test/lint`) overrides the detection.
+5. **`SandboxRunner`** (`sandbox.py`)
    - `run_pytest(worktree_path)` and `run_linter(worktree_path, file)` (`ruff`), each returning `(passed, output)`.
-   - `SANDBOX_MODE=docker` (default when Docker is available): `docker run --rm --network none -v <worktree>:/work -w /work <image> ...`.
-   - `SANDBOX_MODE=subprocess` (fallback): `cwd=worktree`, stripped environment (no API keys), `timeout=SANDBOX_TIMEOUT_SEC`.
+   - `SANDBOX_MODE=subprocess` (default): `cwd=worktree`, stripped environment (no API keys), `timeout=SANDBOX_TIMEOUT_SEC`. Safe as a default because only human-approved code ever runs (write gate before verify).
+   - `SANDBOX_MODE=docker` (optional): `docker run --rm --network none -v <worktree>:/work:ro -w /work <image> ...`; fails closed if Docker or the image is missing.
    - A timeout counts as a failure with an explicit message.
-5. **`GitOps`** (`git_ops.py`)
-   - `commit(worktree_path, file, message) -> sha` on the run branch.
-   - `merge_ff(repo, base_branch, run_branch) -> sha`: fast-forward only.
-   - `revert(repo, sha) -> revert_sha`: compensating action after a merge.
+6. **git helpers** (`git_ops.py`)
+   - `run_git(cwd, *args)` and `list_files(repo)` (tracked + untracked, not ignored), used by the planner to choose the file. No commit: the agent writes the approved file and leaves committing to the user.
 
 ---
 
@@ -162,19 +165,25 @@ Plain Python classes, unit-tested, **called by step code only** (no LLM tool cal
 ### 5.1 Single source of truth: the transition table (`graph.py`)
 The graph is declared once as data (`(from_step, event) -> to_step`) and used by the runner, the tests and the dashboard (to draw the graph and highlight the current step).
 
+Two human gates: the **plan** (before any code is generated) and the **write** (before the proposed file is written and tested). No generated code runs before a human has read it.
+
 ```
-plan ──PlanCreated──▶ code ──CodeGenerated──▶ verify
-verify ──VerificationPassed──▶ approval
-verify ──VerificationFailed [fix_iteration < MAX_FIX]──▶ code       (auto-fix loop, error_summary injected)
-verify ──VerificationFailed [fix_iteration ≥ MAX_FIX]──▶ approval   (flagged: approve disabled)
-approval ──Approved──▶ finalize
-approval ──RevisionRequested [revision_iteration < MAX_REVISIONS]──▶ plan   (human_feedback injected)
-approval ──RevisionRequested [revision_iteration ≥ MAX_REVISIONS]──▶ compensate (REJECTED, "max_iterations")
-approval ──Rejected──▶ compensate (REJECTED, "human_rejected")
-approval ──Expired──▶ compensate (EXPIRED, "approval_expired")
-finalize ──Committed──▶ COMPLETED
-finalize ──CommitFailed──▶ compensate (FAILED, "commit_failed")
-finalize ──PostCommitCheckFailed──▶ compensate (FAILED, "post_commit_check_failed")
+plan ──PlanCreated──▶ plan_approval
+plan_approval ──Approved──▶ code
+plan_approval ──RevisionRequested [revision_iteration < MAX_REVISIONS]──▶ plan   (human_feedback injected)
+code ──CodeGenerated──▶ write_approval            (diff computed, nothing written)
+write_approval ──Approved──▶ verify                (approve always means "write in the worktree and test")
+write_approval ──WriteAnywayRequested──▶ finalize  (own decision, accepted only once fixes ran out: the code shown is the one that failed)
+write_approval ──RevisionRequested [revision_iteration < MAX_REVISIONS]──▶ code  (human_feedback injected)
+<either gate> ──RevisionRequested [revision_iteration ≥ MAX_REVISIONS]──▶ compensate (REJECTED, "max_iterations")
+<either gate> ──Rejected──▶ compensate (REJECTED, "human_rejected")
+<either gate> ──Expired──▶ compensate (EXPIRED, "approval_expired")
+verify ──VerificationPassed──▶ finalize           (approved file written in the worktree, then tested)
+verify ──VerificationFailed [fix_iteration < MAX_FIX]──▶ code   (auto-fix: the fix goes back to the write gate)
+verify ──VerificationFailed [fix_iteration ≥ MAX_FIX]──▶ write_approval   (the human decides: refine, reject, write anyway)
+finalize ──Written [tests pass]──▶ COMPLETED      (file written in the user's working tree, not committed)
+finalize ──Written [tests fail]──▶ COMPLETED ("written_despite_failing_tests")
+finalize ──WriteFailed──▶ compensate (FAILED, "write_failed")   (file edited meanwhile: nothing overwritten)
 ```
 
 ### 5.2 Engine choice (decided in Phase 0)
@@ -188,38 +197,34 @@ finalize ──PostCommitCheckFailed──▶ compensate (FAILED, "post_commit_c
 - Every LLM call goes through an **LLM cache** keyed by `(run_id, step, iteration, prompt_hash)`: a step re-run after a crash replays the cached response instead of paying again.
 - Tools are idempotent (worktree reuse, patch overwrites the file, revert checks whether it has already been done).
 
-### 5.4 The five steps (`steps.py`)
+### 5.4 The steps (`steps.py`)
 
 **Step 1 – `PlanStep`** (`planner`)
-- Input: `user_prompt`, `target_file`, `human_feedback` (if revising).
-- Creates/reuses the worktree, reads the file and its AST outline, asks for a `PlanOutput` (structured JSON, validated by Pydantic; one retry on validation error, then `FAILED`).
-- Emits `PlanCreated`.
+- Input: `user_prompt`, the repository file listing and Python outlines (or the user's `target_file`), `human_feedback` (if refining).
+- Creates/reuses the worktree, asks for a `PlanOutput` (structured JSON, validated by Pydantic; one retry on validation error, then `FAILED`). An unsafe `target_file` is an invalid output.
+- Reads the original content from the **user's working tree**. Emits `PlanCreated`.
+
+**Plan gate – `HumanApprovalStep` (`plan`)**: approve → code, refine (comment) → plan, reject.
 
 **Step 2 – `CodeGenerationStep`** (`coder`)
-- Input: plan, original content, and `verification.error_summary` when fixing.
-- Asks for a `CodePatch` (structured output), then the **step** calls `PatchEngine.apply` and stores `unified_diff`.
+- Input: plan, original content, previous proposal, `verification.error_summary` when fixing, `human_feedback`.
+- Asks for a `CodePatch` (structured output); the step computes `unified_diff` with `PatchEngine.diff`. **Nothing is written.**
 - Emits `CodeGenerated`.
 
+**Write gate – `HumanApprovalStep` (`write`)**: approve → write and verify, refine (comment) → code, reject.
+
+Both gates: set `AWAITING_APPROVAL` and `approval_deadline = clock.now() + APPROVAL_TIMEOUT_SEC`, persist, and **suspend** (the runner returns). Decisions arrive via the interactive agent, the CLI or the dashboard, are stored as an `ApprovalDecision` with their gate (append-only) and resume the run. A human revision clears the previous verification result. **Expiry:** `sweep_expired()` moves overdue runs to `Expired` (called by `sweep`, at the start of `resume`/`decide`/`status`, and on each dashboard refresh); a late decision is refused. `wait_ms` = time between suspension and decision; `compute_ms` excludes it.
+
 **Step 3 – `VerificationStep`** (tools + `summarizer`)
-- Runs `run_pytest` and `run_linter` concurrently (`asyncio.gather`) in the sandbox.
-- On failure: `summarizer` condenses the output (in mock mode: deterministic truncation), increments `fix_iteration`.
+- Writes the approved content into the worktree, then runs `run_pytest` and `run_linter` concurrently (`asyncio.gather`).
+- pytest exit code 5 (no tests collected) counts as a pass only if the user's repository has no test file at all. Ruff runs with the target repository's configuration and fails only on violations the change introduces (baseline: the original content, linted through stdin under the same path; matched on rule and message).
+- On failure: `summarizer` condenses the output (in mock mode: deterministic truncation), increments `fix_iteration`. A human "refine" resets `fix_iteration` (fresh budget of `MAX_FIX` = 10 automatic fixes).
 - Emits `VerificationPassed` or `VerificationFailed` (routing per table).
 
-**Step 4 – `HumanApprovalStep`**
-- Sets `AWAITING_APPROVAL`, `approval_deadline = clock.now() + APPROVAL_TIMEOUT_SEC`, persists, and **suspends** (the runner returns).
-- Shown to the reviewer: plan, diff, verification result, iteration counters, cost so far.
-- Decisions (`approve` / `revise` + comment / `reject`) arrive via CLI or dashboard, are stored as an `ApprovalDecision` (append-only) and resume the run.
-- `approve` is refused if verification did not pass.
-- **Expiry:** `sweep_expired()` moves every overdue run to `Expired`. It is called by the CLI `sweep` command, at the start of every `resume`/`decide`/`status`, and on each dashboard refresh. A decision arriving after the deadline is refused.
-- `wait_ms` = time between suspension and decision; `compute_ms` excludes it.
-
-**Step 5 – `FinalizationStep`** (+ `CompensationHandler`)
-- `commit` on the run branch → `merge_ff` into `base_branch` → **post-commit check**: re-run pytest on the base branch.
-- Success → `COMPLETED`, worktree removed.
-- `CompensationHandler` (not a graph step, a terminal handler):
-  - before merge (rejected / expired / max iterations / commit failed) → `WorkspaceManager.discard` (`discard_worktree`);
-  - after merge (post-commit check failed) → `GitOps.revert` (`git_revert`), then discard.
-  - Writes a `CompensationRecord`; the status keeps the real outcome (`REJECTED` / `EXPIRED` / `FAILED`) with `terminal_reason`.
+**Step 4 – `FinalizationStep`** (+ `CompensationHandler`)
+- Checks the worktree file is byte-for-byte the approved content and that the user's file still equals the original, then writes the approved content into the user's working tree. **No commit.**
+- Success → `COMPLETED`, worktree removed. `undo(run_id)` later restores the original content if the file still holds exactly what the run wrote.
+- `CompensationHandler` (terminal handler): every other ending discards the worktree and run branch (`discard_worktree`); the user's tree was never written. The status keeps the real outcome (`REJECTED` / `EXPIRED` / `FAILED`) with `terminal_reason`.
 
 ---
 
@@ -235,7 +240,7 @@ Tables:
 
 ## 7. OBSERVABILITY — `src/observability/telemetry.py`
 - One root span per run (`process.run`), one child span per step execution (`step.<name>`), one child span per LLM call (via an SK function-invocation filter).
-- Attributes: `process.run_id`, `process.step.name`, `process.iteration`, `process.step.compute_ms`, `process.step.wait_ms`, `llm.provider` (`openrouter`|`mock`), `llm.service_id`, `llm.model`, `llm.tokens.prompt`, `llm.tokens.completion`, `llm.cost_usd`, `verification.pytest_passed`, `verification.linter_passed`, `approval.action`, `approval.actor`.
+- Attributes: `process.run_id`, `process.step.name`, `process.iteration`, `process.step.compute_ms`, `process.step.wait_ms`, `llm.provider` (`openrouter`|`mock`), `llm.service_id`, `llm.model`, `llm.tokens.prompt`, `llm.tokens.completion`, `llm.cost_usd`, `verification.pytest_passed`, `verification.linter_passed`, `approval.gate`, `approval.action`, `approval.actor`.
 - `generate_evaluation_report(db_path)`:
   1. completion rate per scenario;
   2. mean and P95 **compute time** per step and per model, and human wait time reported separately;
@@ -248,17 +253,18 @@ Tables:
 All scenario tests run with the fake LLM and `FakeClock` (no `sleep`). The fixture builds a temporary git repo with a buggy module and its pytest suite.
 
 Mandatory scenarios (`test_scenarios.py`):
-1. `test_nominal` – plan → code → verify → approval; `approve` → `COMPLETED`, commit on base branch, worktree removed.
-2. `test_rejection` – `reject` → `REJECTED`, compensation `discard_worktree`, base branch unchanged, decision stored in `approvals`.
+1. `test_nominal` – the planner picks the file; plan gate → write gate → verify → `COMPLETED`; file written, **no commit**, worktree removed.
+2. `test_rejection` (at each gate) – `reject` → `REJECTED`, compensation `discard_worktree`, user file unchanged, decision stored with its gate.
 3. `test_timeout` – advance `FakeClock` past the deadline, call `sweep_expired()` → `EXPIRED`, worktree discarded, late `approve` refused.
-4. `test_resume_while_awaiting_approval` – destroy the runner, create a fresh one from `run_id`, `approve` → `COMPLETED`; fake-LLM call count proves steps 1–3 were not re-run.
-5. `test_crash_mid_step` – fault injector raises inside `CodeGenerationStep` *after* the LLM call; fresh runner resumes at Step 2, the LLM response comes from the cache (call count unchanged), run reaches `AWAITING_APPROVAL`.
+4. `test_resume_while_awaiting_approval` – destroy the runner at the write gate, create a fresh one, `approve` → `COMPLETED`; fake-LLM call count proves earlier steps were not re-run.
+5. `test_crash_mid_step` – fault injector raises inside `CodeGenerationStep` *after* the LLM call; fresh runner resumes at Step 2, the LLM response comes from the cache, run reaches the write gate.
 
 Additional tests:
-6. `test_revision_loop` – `revise` with a comment → back to Plan with `human_feedback` in the prompt; `MAX_REVISIONS` exceeded → `REJECTED` (`max_iterations`).
-7. `test_auto_fix_loop` – first patch fails tests, second passes; `fix_iteration == 1`; exhausting `MAX_FIX` reaches approval with `approve` refused.
-8. `test_post_commit_compensation` – post-commit check fails → `git revert` applied, `FAILED` (`post_commit_check_failed`).
+6. `test_refine_plan_then_refine_diff` – refine at the plan gate (feedback in the planner prompt), then at the write gate (feedback and previous proposal in the coder prompt); `MAX_REVISIONS` exceeded → `REJECTED` (`max_iterations`).
+7. `test_auto_fix_loop` – first patch fails tests, the fix goes back to the write gate, then passes; exhausting `MAX_FIX` hands the failing code back to the write gate (refine, reject, or write anyway → `COMPLETED` / `written_despite_failing_tests`).
+8. `test_write_conflict` – the user edits the file during the run → `FAILED` (`write_failed`), nothing overwritten.
 9. `test_budget_cap` – fake usage above `MAX_COST_EUR_PER_RUN` → `FAILED` (`budget_exceeded`).
+10. `test_project_without_tests_and_with_old_lint_debt` – no test suite and pre-existing lint violations → `COMPLETED`.
 Plus unit tests for every tool and for the transition table.
 
 ---

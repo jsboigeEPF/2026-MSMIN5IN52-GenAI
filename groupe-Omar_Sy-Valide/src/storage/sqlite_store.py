@@ -31,6 +31,7 @@ CREATE INDEX IF NOT EXISTS events_by_run ON events (run_id, id);
 CREATE TABLE IF NOT EXISTS approvals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id TEXT NOT NULL,
+    gate TEXT NOT NULL,
     action TEXT NOT NULL,
     actor TEXT NOT NULL,
     comment TEXT,
@@ -99,7 +100,14 @@ class SqliteStore:
         self._db = await aiosqlite.connect(self.db_path)
         self._db.row_factory = aiosqlite.Row
         await self._db.executescript(SCHEMA + APPEND_ONLY_TRIGGERS)
+        await self._migrate()
         await self._db.commit()
+
+    async def _migrate(self) -> None:
+        """Databases created before the plan gate have no `approvals.gate`; their decisions were writes."""
+        columns = {row["name"] for row in await self._fetch("PRAGMA table_info(approvals)")}
+        if "gate" not in columns:
+            await self.db.execute("ALTER TABLE approvals ADD COLUMN gate TEXT NOT NULL DEFAULT 'write'")
 
     async def close(self) -> None:
         if self._db is not None:
@@ -152,6 +160,19 @@ class SqliteStore:
             )
         return [AgentProcessState.model_validate_json(r["state_json"]) for r in rows]
 
+    async def run_totals(self) -> dict[str, tuple[float, float, float]]:
+        """Per run: (cost in USD, machine time in ms, human wait in ms), in one query."""
+        rows = await self._fetch(
+            "SELECT run_id, SUM(cost_usd) AS cost, SUM(compute_ms) AS compute, SUM(wait_ms) AS wait "
+            "FROM metrics GROUP BY run_id"
+        )
+        return {r["run_id"]: (r["cost"] or 0.0, r["compute"] or 0.0, r["wait"] or 0.0) for r in rows}
+
+    async def run_starts(self) -> dict[str, datetime]:
+        """When each run started (its first journal entry), in one query."""
+        rows = await self._fetch("SELECT run_id, MIN(ts) AS started FROM events GROUP BY run_id")
+        return {r["run_id"]: datetime.fromisoformat(r["started"]) for r in rows}
+
     # --- event journal (append-only) --------------------------------------------------------------------
 
     async def append_event(
@@ -188,10 +209,11 @@ class SqliteStore:
 
     async def append_approval(self, run_id: str, decision: ApprovalDecision) -> None:
         await self._write(
-            "INSERT INTO approvals (run_id, action, actor, comment, decided_at, iteration) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO approvals (run_id, gate, action, actor, comment, decided_at, iteration) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 run_id,
+                decision.gate,
                 decision.action,
                 decision.actor,
                 decision.comment,
@@ -204,6 +226,7 @@ class SqliteStore:
         rows = await self._fetch("SELECT * FROM approvals WHERE run_id = ? ORDER BY id", (run_id,))
         return [
             ApprovalDecision(
+                gate=r["gate"],
                 action=r["action"],
                 actor=r["actor"],
                 comment=r["comment"],
@@ -234,6 +257,13 @@ class SqliteStore:
             "(run_id, step, iteration, prompt_hash, response_json, usage_json) VALUES (?, ?, ?, ?, ?, ?)",
             (run_id, step, iteration, prompt_hash, response_json, usage_json),
         )
+
+    async def llm_responses(self, run_id: str) -> dict[tuple[str, int], str]:
+        """Every validated LLM reply of a run, by (step, iteration): the run's history, plan by plan."""
+        rows = await self._fetch(
+            "SELECT step, iteration, response_json FROM llm_cache WHERE run_id = ? ORDER BY rowid", (run_id,)
+        )
+        return {(r["step"], r["iteration"]): r["response_json"] for r in rows}
 
     async def llm_cost_usd(self, run_id: str) -> float:
         """Total cost of every paid LLM call of the run (each paid response is cached exactly once)."""
