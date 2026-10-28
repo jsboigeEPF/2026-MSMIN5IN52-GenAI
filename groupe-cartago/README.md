@@ -18,7 +18,8 @@ Main use case: a student imports their courses (PDF, Markdown, text or Excel fil
 
 ## Features
 
-- **Answers grounded in the course only.** The 8 most relevant passages are retrieved and the language model may use nothing else. Passages below a relevance cutoff are discarded, and when nothing relevant remains the assistant replies "Je n'ai pas trouvé cette information dans les supports de cours" instead of answering.
+- **Hybrid search with reranking.** A vector search (meaning) and a keyword search (exact terms such as "vMotion", "ECB" or "Kerckhoffs") propose candidate passages; a reranker model reads the question with each candidate and re-sorts them. The 8 best passages go to the language model, which may use nothing else.
+- **Answers grounded in the course only.** When even the best candidate is judged irrelevant, the assistant replies "Je n'ai pas trouvé cette information dans les supports de cours" without calling the language model.
 - **Verified, line-exact citations.** The model must return each sentence with its sources and a word-for-word quote from each. A sentence that cites no valid source is not shown. The server checks every quote against the source text and maps it to its exact lines; if a quote cannot be found, the whole excerpt is highlighted instead.
 - **Highlighted sources in a built-in viewer.** PDF pages (with highlight boxes over the cited lines), Markdown and text sheets (with formulas rendered), and spreadsheets (with cited rows highlighted).
 - **Scoped questions.** Ask across all courses, one subject, one course, or a single document.
@@ -32,7 +33,7 @@ Main use case: a student imports their courses (PDF, Markdown, text or Excel fil
 
 ```text
 Import:   course files ─► parse (layout-aware) ─► chunks with their source lines ─► local embeddings ─► PostgreSQL + pgvector
-Question: rewrite follow-up ─► embed ─► 8 closest chunks in scope ─► relevance cutoff ─► LLM (claims + verbatim quotes)
+Question: rewrite follow-up ─► vector search + keyword search in scope ─► rerank ─► relevance cutoff ─► 8 excerpts ─► LLM (claims + verbatim quotes)
           ─► verify quotes ─► stream the answer ─► citation opens the document with the lines highlighted
 ```
 
@@ -41,21 +42,22 @@ Question: rewrite follow-up ─► embed ─► 8 closest chunks in scope ─►
 | Web interface | `frontend/` | Library and conversations, chat, document viewer. Talks to the API over HTTP and reads the streamed answer. |
 | API | `backend/app/main.py` | HTTP endpoints for the library, documents, conversations and answers. Applies database migrations on startup. |
 | Ingestion | `backend/app/ingest.py`, `ingestion.py`, `pdf_parsing.py`, `text_parsing.py` | Finds course files, parses them, splits them into chunks that remember their source lines, embeds and stores them. |
-| Retrieval and answering | `backend/app/answering.py`, `locating.py` | Rewrites follow-ups, retrieves the closest chunks in scope, builds the prompt, validates the model's claims and quotes, and maps quotes to exact lines. |
-| Providers | `backend/app/providers/` | Client for the embedding service; Gemini and Groq answer providers; offline test doubles. |
-| Embedding service | `embeddings/service.py` | Small HTTP service that runs the embedding model. Runs natively by default so it can use the GPU, or in Docker on the CPU. |
-| Database | PostgreSQL + pgvector (`compose.yaml`) | Documents, chunks, vectors, source positions and conversations. |
+| Retrieval and answering | `backend/app/answering.py`, `locating.py` | Rewrites follow-ups, runs the hybrid search and reranking in scope, builds the prompt, validates the model's claims and quotes, and maps quotes to exact lines. |
+| Providers | `backend/app/providers/` | Clients for the embedding and reranking service; Gemini and Groq answer providers; offline test doubles. |
+| Model service | `embeddings/service.py` | Small HTTP service that runs the embedding model and the reranker. Runs natively by default so it can use the GPU, or in Docker on the CPU. |
+| Database | PostgreSQL + pgvector (`compose.yaml`) | Documents, chunks, vectors, a French full-text index, source positions and conversations. |
 
 **Data flow for a question:**
 1. The interface sends the question, the conversation and the scope to `POST /api/v1/answers/stream`.
 2. A follow-up question is first rewritten into a standalone question.
-3. The question is embedded, and the 8 closest chunks within the scope are retrieved with cosine distance.
-4. Chunks under the relevance cutoff are dropped. If none remain, the assistant refuses.
-5. The excerpts are sent to the language model, which returns sentences ("claims"), each with source numbers and verbatim quotes.
-6. Sentences without a valid source are dropped. Each quote is verified against its excerpt and located in the original file.
-7. The sentences stream back to the interface as newline-delimited JSON, followed by their citations.
+3. Two searches run within the scope: the 20 closest chunks by vector similarity, and the 20 best keyword matches (PostgreSQL full-text search in French).
+4. The reranker scores every candidate against the question. The final order fuses the vector ranking and the reranker ranking (reciprocal rank fusion).
+5. If even the best candidate scores under the reranker's relevance cutoff, the assistant refuses without calling the language model. Otherwise the 8 best passages are kept.
+6. The excerpts are sent to the language model, which returns sentences ("claims"), each with source numbers and verbatim quotes.
+7. Sentences without a valid source are dropped. Each quote is verified against its excerpt and located in the original file.
+8. The sentences stream back to the interface as newline-delimited JSON, followed by their citations.
 
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains each design decision in detail. It covers the parsing rules, the chunk size, the embedding model choice (benchmarked on the course material), PostgreSQL instead of a dedicated vector database, the full LLM prompt, the API, and the measured thresholds.
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains each design decision in detail. It covers the parsing rules, the chunk size, the embedding model choice (benchmarked on the course material), the hybrid search and reranking recipe (also measured), PostgreSQL instead of a dedicated vector database, the full LLM prompt, the API, and the measured thresholds.
 
 ## Technology stack
 
@@ -65,6 +67,8 @@ Question: rewrite follow-up ─► embed ─► 8 closest chunks in scope ─►
 | Parsing | PyMuPDF, openpyxl | PDF layout and text extraction; Excel workbooks |
 | Embeddings | Qwen3-Embedding-0.6B via sentence-transformers and PyTorch | 1024-dimension vectors for passages and questions |
 | Vector database | PostgreSQL 16 with pgvector 0.8.6 (HNSW index, cosine distance) | Storage and similarity search |
+| Keyword search | PostgreSQL full-text search (`tsvector`, French stemming, GIN index) | Exact terms, acronyms and names |
+| Reranking | BAAI/bge-reranker-v2-m3 (multilingual cross-encoder) via sentence-transformers | Re-sorts the candidates and decides whether anything is relevant |
 | Answer generation | Google Gemini (`google-genai`, default `gemini-3.8-flash` with fallbacks) or Groq; temperature 0.2 | Writes the answer from the retrieved excerpts |
 | Quote verification | rapidfuzz | Matches the model's quotes to the source text |
 | Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS, react-pdf (pdf.js), KaTeX | French web interface and document viewer |
@@ -75,7 +79,7 @@ Question: rewrite follow-up ─► embed ─► 8 closest chunks in scope ─►
 - **Docker Desktop** (or Docker Engine with Compose v2), to run the database, API and web interface. Docker must be able to pull `pgvector/pgvector`, `python` and `node` images from Docker Hub.
 - **[uv](https://docs.astral.sh/uv/)** (`brew install uv` on macOS). It runs the embedding model natively and the ingestion, evaluation and test commands, and installs Python 3.12 automatically.
 - **An API key** for the answer model: a [Gemini API key](https://aistudio.google.com/apikey) (free tier) or a [Groq API key](https://console.groq.com/keys).
-- **About 1.2 GB** of disk space and a network connection for the first start (PyTorch and the embedding model are downloaded once).
+- **About 3.5 GB** of disk space and a network connection for the first start (PyTorch, the embedding model and the reranker are downloaded once).
 - **Node.js 22 or later and npm**, only to run the frontend tests and checks (the interface itself is built inside Docker).
 
 ## Installation and configuration
@@ -83,8 +87,8 @@ Question: rewrite follow-up ─► embed ─► 8 closest chunks in scope ─►
 1. **Clone the repository.**
 
    ```sh
-   git clone https://github.com/jsboigeEPF/2026-MSMIN5IN52-GenAI.git
-   cd 2026-MSMIN5IN52-GenAI/groupe-cartago
+   git clone https://github.com/YoussefAG1337/RAG_epf.git
+   cd RAG_epf
    ```
 
 2. **Create the configuration file.** All settings live in `.env` at the repository root; `.env` is ignored by Git, so keys never leave your machine.
@@ -108,7 +112,9 @@ Question: rewrite follow-up ─► embed ─► 8 closest chunks in scope ─►
    | `DATABASE_PORT` | Host port for PostgreSQL (default 5432) |
    | `ANSWER_MODEL`, `ANSWER_FALLBACK_MODELS` | Answer model, then fallbacks tried in order when one is overloaded or rate limited |
    | `ANSWER_TEMPERATURE` | Answer model temperature, 0 to 2 (default 0.2) |
-   | `EVIDENCE_MINIMUM_SCORE` | Relevance cutoff (empty: the measured default, 0.40) |
+   | `RERANK_MINIMUM_SCORE` | Reranker relevance cutoff (empty: the measured default, 0.005) |
+   | `EVIDENCE_MINIMUM_SCORE` | Cosine relevance cutoff, used when reranking is off (empty: the measured default, 0.40) |
+   | `RERANK_PROVIDER` | `none` turns reranking off (vector and keyword rankings are then fused directly) |
    | `RETRIEVAL_LIMIT` | Number of excerpts given to the model (default 8) |
    | `API_HOST_PORT`, `WEB_HOST_PORT`, `EMBEDDING_PORT` | Host ports of the API (8000), interface (3000) and embedding service (8081) |
 
@@ -188,7 +194,7 @@ A typical demonstration with a cryptography course imported:
 
 ```sh
 cd backend
-uv run --extra dev pytest                  # 129 tests
+uv run --extra dev pytest                  # 142 tests
 uv run --extra dev ruff check . ../embeddings
 uv run --extra dev ruff format --check . ../embeddings
 uv run --extra dev mypy app tests          # strict mode
@@ -199,7 +205,7 @@ The tests cover:
 - Prompt construction, the relevance cutoff, quote verification and streamed answering.
 - The API, the providers and the configuration.
 
-Four of the tests are integration tests that need PostgreSQL. They create and drop a throwaway `course_rag_test` database, so your data is never touched. They connect to `TEST_DATABASE_PORT` (default 5433; set it to your `DATABASE_PORT`) and are skipped when no server is reachable.
+Five of the tests are integration tests that need PostgreSQL. They create and drop a throwaway `course_rag_test` database, so your data is never touched. They connect to `TEST_DATABASE_PORT` (default 5433; set it to your `DATABASE_PORT`) and are skipped when no server is reachable.
 
 **Frontend** (24 tests: stream contract validation, chat state, math rendering and the main interface flows):
 
@@ -217,7 +223,7 @@ npm run typecheck
 cd frontend && npm run e2e
 ```
 
-**Retrieval and answer quality**, on the 30 questions with known sources in `backend/eval/questions.json` plus 5 off-topic questions:
+**Retrieval and answer quality**, on the questions with known sources in `backend/eval/questions.json` (30 paraphrase questions and 12 exact-term questions such as "DRS" or "mode ECB") plus 5 off-topic questions:
 
 ```sh
 uv run --project backend python -m app.evaluate             # retrieval only
@@ -228,15 +234,16 @@ Results on the EPF course material (Cryptographie, Statistiques and Virtualisati
 
 | Measure | Result |
 |---|---|
-| Right passage ranked first | 83 % (25/30) |
-| Right passage among the 3 best | 97 % (29/30) |
-| Right passage among the 8 excerpts given to the model | 100 % (30/30) |
-| Mean reciprocal rank | 0.908 |
+| Right passage ranked first (paraphrases) | 83 % (25/30) |
+| Right passage among the 3 best (paraphrases) | 93 % (28/30) |
+| Right passage among the 8 excerpts given to the model (paraphrases) | 100 % (30/30) |
+| Mean reciprocal rank (paraphrases) | 0.893 |
+| Exact term ranked first | 100 % (12/12); vector search alone: 11/12 |
 | Answerable questions answered | 28 / 30 |
 | Off-topic questions refused | 5 / 5 |
 | Citations whose quote was verified and highlighted exactly | 41 / 41 |
 
-The retrieval figures are deterministic. The answer figures come from an earlier `--answers` run with Gemini; answers vary slightly between runs. A full `--answers` run can also exhaust the Gemini free tier's per-minute quota, and the questions affected show up as errors.
+The retrieval figures are deterministic. The answer figures come from an earlier `--answers` run with Gemini, on the 30 paraphrase questions and before hybrid search; answers vary slightly between runs. A full `--answers` run can also exhaust the Gemini free tier's per-minute quota, and the questions affected show up as errors.
 
 ## Limitations and future improvements
 
